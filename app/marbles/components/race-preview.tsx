@@ -35,6 +35,8 @@ export function RacePreview({ race }: RacePreviewProps) {
   const videoShellRef = useRef<HTMLDivElement | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const dragRef = useRef<DragState | undefined>(undefined);
+  const world = uiSnap?.world;
+  const cam = uiSnap?.camera;
 
   function stopPropagation(e: { stopPropagation: () => void }) {
     e.stopPropagation();
@@ -90,7 +92,6 @@ export function RacePreview({ race }: RacePreviewProps) {
   }
 
   function onMinimapClick(e: MouseEvent<HTMLButtonElement>) {
-    const world = uiSnap?.world;
     if (!world) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const nx = clamp((e.clientX - rect.left) / rect.width, 0, 1);
@@ -117,9 +118,9 @@ export function RacePreview({ race }: RacePreviewProps) {
   return (
     <section className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <h2 className="text-base font-medium">프리뷰(16:9)</h2>
+        <h2 className="text-base font-medium">레이스 화면</h2>
         <div className="text-xs text-zinc-400">
-          {VIEW_W}×{VIEW_H} 내부 해상도로 고정돼요
+          {VIEW_W}×{VIEW_H} 내부 해상도
         </div>
       </div>
 
@@ -145,53 +146,47 @@ export function RacePreview({ race }: RacePreviewProps) {
           </button>
         </div>
 
-        {uiSnap?.camera && uiSnap.world
-          ? (() => {
-              const world = uiSnap.world;
-              const cam = uiSnap.camera;
-              return (
-                <details className="group absolute bottom-3 right-3" onPointerDown={stopPropagation}>
-                  <summary className="list-none [&::-webkit-details-marker]:hidden">
-                    <span className="inline-flex h-9 items-center gap-2 rounded-xl border border-white/10 bg-black/55 px-3 text-xs font-medium text-zinc-200 backdrop-blur">
-                      미니맵
-                      <span className="text-[10px] text-zinc-400 group-open:hidden">열기</span>
-                      <span className="text-[10px] text-zinc-400 hidden group-open:inline">닫기</span>
-                    </span>
-                  </summary>
-                  <div className="mt-2 w-[172px] rounded-xl border border-white/10 bg-black/55 p-2 backdrop-blur">
-                    <div className="flex items-center justify-between">
-                      <div className="text-xs font-medium text-zinc-200">클릭 포커스예요</div>
-                      <div className="text-[10px] text-zinc-400">{Math.round(ms('4s') / 1000)}초</div>
-                    </div>
-                    <button
-                      type="button"
-                      className="relative mt-2 block w-full overflow-hidden rounded-lg border border-white/10 bg-zinc-950"
-                      style={{ aspectRatio: '3 / 5' }}
-                      onPointerDown={stopPropagation}
-                      onClick={onMinimapClick}
-                    >
-                      <div className="absolute inset-0 bg-linear-to-b from-white/0 via-white/0 to-white/5" />
-                      {/* Viewport */}
-                      <div
-                        className="absolute rounded border border-emerald-300/60 bg-emerald-300/5"
-                        style={{
-                          left: `${(cam.x / world.w) * 100}%`,
-                          top: `${(cam.y / world.h) * 100}%`,
-                          width: `${(world.screenW / world.w) * 100}%`,
-                          height: `${(world.screenH / world.h) * 100}%`,
-                        }}
-                      />
-                      {/* Finish cup marker (approx) */}
-                      <div
-                        className="absolute left-1/2 h-2 w-2 -translate-x-1/2 rounded-full bg-white/30"
-                        style={{ bottom: `${(120 / world.h) * 100}%` }}
-                      />
-                    </button>
-                  </div>
-                </details>
-              );
-            })()
-          : null}
+        {world && cam ? (
+          <details className="group absolute bottom-3 right-3" onPointerDown={stopPropagation}>
+            <summary className="list-none [&::-webkit-details-marker]:hidden">
+              <span className="inline-flex h-9 items-center gap-2 rounded-xl border border-white/10 bg-black/55 px-3 text-xs font-medium text-zinc-200 backdrop-blur">
+                미니맵
+                <span className="text-[10px] text-zinc-400 group-open:hidden">열기</span>
+                <span className="text-[10px] text-zinc-400 hidden group-open:inline">닫기</span>
+              </span>
+            </summary>
+            <div className="mt-2 w-[172px] rounded-xl border border-white/10 bg-black/55 p-2 backdrop-blur">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-medium text-zinc-200">클릭 포커스예요</div>
+                <div className="text-[10px] text-zinc-400">{Math.round(ms('4s') / 1000)}초</div>
+              </div>
+              <button
+                type="button"
+                className="relative mt-2 block w-full overflow-hidden rounded-lg border border-white/10 bg-zinc-950"
+                style={{ aspectRatio: '3 / 5' }}
+                onPointerDown={stopPropagation}
+                onClick={onMinimapClick}
+              >
+                <div className="absolute inset-0 bg-linear-to-b from-white/0 via-white/0 to-white/5" />
+                {/* Viewport */}
+                <div
+                  className="absolute rounded border border-emerald-300/60 bg-emerald-300/5"
+                  style={{
+                    left: `${(cam.x / world.w) * 100}%`,
+                    top: `${(cam.y / world.h) * 100}%`,
+                    width: `${(world.screenW / world.w) * 100}%`,
+                    height: `${(world.screenH / world.h) * 100}%`,
+                  }}
+                />
+                {/* Finish cup marker (approx) */}
+                <div
+                  className="absolute left-1/2 h-2 w-2 -translate-x-1/2 rounded-full bg-white/30"
+                  style={{ bottom: `${(120 / world.h) * 100}%` }}
+                />
+              </button>
+            </div>
+          </details>
+        ) : null}
 
         {uiSnap?.cut ? (
           <div className="pointer-events-none absolute left-1/2 top-4 w-[min(520px,calc(100%-32px))] -translate-x-1/2 rounded-2xl border border-white/10 bg-black/60 px-4 py-3 backdrop-blur">
@@ -221,6 +216,15 @@ export function RacePreview({ race }: RacePreviewProps) {
               <div className="text-2xl font-semibold tabular-nums tracking-tight text-amber-100">
                 {Math.max(0, Math.ceil(uiSnap.slowMo.remainingMs / ms('1s')))}
               </div>
+            </div>
+          </div>
+        ) : null}
+
+        {phase === 'running' && uiSnap?.fastForward && uiSnap.fastForward.scale > 1 ? (
+          <div className="pointer-events-none absolute left-3 top-3 rounded-2xl border border-sky-200/10 bg-sky-400/10 px-3 py-2 text-xs text-sky-100/90 backdrop-blur">
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-sky-200">빨리감기예요</span>
+              <span className="tabular-nums text-sky-100/80">×{uiSnap.fastForward.scale}</span>
             </div>
           </div>
         ) : null}

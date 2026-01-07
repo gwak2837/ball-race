@@ -35,9 +35,7 @@ export function MarblesClient() {
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-8">
         <header className="flex flex-col gap-2">
           <h1 className="text-2xl font-semibold tracking-tight">구슬 레이스</h1>
-          <p className="text-sm leading-6 text-zinc-400">
-            {UI_HINT} {phase === 'running' ? '지금 달리고 있어요.' : ''}
-          </p>
+          <p className="text-sm leading-6 text-zinc-400">{phase === 'running' ? '지금 달리고 있어요.' : UI_HINT}</p>
         </header>
 
         <div className="grid gap-6 lg:grid-cols-[420px_1fr]">

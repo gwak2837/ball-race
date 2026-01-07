@@ -79,7 +79,7 @@ export function SetupPanel({ setup, engine, onStart }: SetupPanelProps) {
       <div className="flex items-center justify-between">
         <h2 className="text-base font-medium">참가자 설정</h2>
         <span aria-live="polite" className="text-xs text-zinc-400" data-ready={canStart}>
-          {canStart ? '준비됐어요' : '로딩 중이에요…'}
+          {canStart ? '시작할 수 있어요' : '레이스 화면 준비 중이에요…'}
         </span>
       </div>
 
@@ -223,7 +223,8 @@ export function SetupPanel({ setup, engine, onStart }: SetupPanelProps) {
           <div className="flex items-center justify-between">
             <div className="text-sm font-medium">Top 10</div>
             <div className="text-xs text-zinc-400">
-              생존 {uiSnap.aliveCount.toLocaleString()} / 탈락 {uiSnap.eliminatedCount.toLocaleString()}
+              남은 {uiSnap.aliveCount.toLocaleString()} / 완주 {uiSnap.finishedCount.toLocaleString()} / 탈락{' '}
+              {uiSnap.eliminatedCount.toLocaleString()}
             </div>
           </div>
           {uiSnap.eliminatedBy ? (
@@ -234,9 +235,9 @@ export function SetupPanel({ setup, engine, onStart }: SetupPanelProps) {
             </div>
           ) : null}
           {/* Reserve ONE slot to avoid CLS when notices appear/disappear */}
-          <div className="mt-2 min-h-[68px]">
+          <div className="mt-2 min-h-16">
             {uiSnap.slowMo && uiSnap.slowMo.remainingMs > 0 ? (
-              <div className="h-[68px] rounded-xl border border-amber-200/10 bg-amber-400/10 px-3 py-2 text-sm">
+              <div className="rounded-xl border border-amber-200/10 bg-amber-400/10 p-3 text-sm">
                 <div className="flex items-center justify-between">
                   <div className="font-semibold text-amber-200">골든 모먼트예요</div>
                   <div className="text-xs tabular-nums text-amber-100/80">
@@ -246,7 +247,7 @@ export function SetupPanel({ setup, engine, onStart }: SetupPanelProps) {
                 <div className="mt-1 text-xs text-amber-100/70">결승 직전 초근접 경합이에요.</div>
               </div>
             ) : uiSnap.cut ? (
-              <div className="h-[68px] rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm">
+              <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-sm">
                 <div className="flex items-center justify-between gap-3">
                   <div className="font-medium text-zinc-200">체크포인트 {uiSnap.cut.checkpointNumber} 컷이에요</div>
                   <div className="text-xs tabular-nums text-zinc-300">
@@ -257,8 +258,16 @@ export function SetupPanel({ setup, engine, onStart }: SetupPanelProps) {
                   하위 {uiSnap.cut.cutCount.toLocaleString()}명이 컷될 거예요.
                 </div>
               </div>
+            ) : uiSnap.fastForward && uiSnap.fastForward.scale > 1 ? (
+              <div className="rounded-xl border border-sky-200/10 bg-sky-400/10 p-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <div className="font-semibold text-sky-200">빨리감기예요</div>
+                  <div className="text-xs tabular-nums text-sky-100/80">×{uiSnap.fastForward.scale}</div>
+                </div>
+                <div className="mt-1 text-xs text-sky-100/70">Top10이 나와서 빠르게 마무리 중이에요.</div>
+              </div>
             ) : (
-              <div className="h-[68px] rounded-xl border border-white/10 bg-white/0" />
+              <div className="h-16 rounded-xl border border-white/10 bg-white/0" />
             )}
           </div>
           <ol className="mt-2 flex flex-col gap-1">
@@ -304,7 +313,7 @@ export function SetupPanel({ setup, engine, onStart }: SetupPanelProps) {
       ) : null}
 
       <div className="mt-2 flex flex-col gap-2">
-        <div className="text-xs text-zinc-400">미리보기(일부)</div>
+        <div className="text-xs text-zinc-400">참가자 미리보기 (최대 12명까지)</div>
         <ul className="grid grid-cols-3 gap-2">
           {participantsPreview.map((p) => (
             <li key={p.id} className="rounded-xl border border-white/10 bg-zinc-950 px-2 py-2">
