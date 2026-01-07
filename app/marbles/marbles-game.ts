@@ -107,6 +107,13 @@ interface JetBand {
   upVel: number;
 }
 
+interface CupEntry {
+  id: string;
+  name: string;
+  colorHex: string;
+  atMs: number;
+}
+
 const SCREEN_W = 1280;
 const SCREEN_H = 720;
 const WORLD_W = 1280;
@@ -229,6 +236,8 @@ export class MarblesGame {
 
   private obstacles: KinematicObstacle[] = [];
   private jetBands: JetBand[] = [];
+  private cupEntries: CupEntry[] = [];
+  private cupEntryById = new Map<string, CupEntry>();
   private bumperFxG: PIXI.Graphics | null = null;
   private bumperFx: Array<{ x: number; y: number; r: number; atMs: number; kind: 'normal' | 'mega' }> = [];
   private lastBumperFxAtMs = 0;
@@ -276,6 +285,8 @@ export class MarblesGame {
     this.lastEventSfxAtMs = 0;
     this.finishState = null;
     this.winner = null;
+    this.cupEntries = [];
+    this.cupEntryById.clear();
     this.eliminatedBy = { fall: 0, cut: 0 };
     this.startedAtMs = performance.now();
     this.elapsedMs = 0;
@@ -327,6 +338,8 @@ export class MarblesGame {
     this.lastEventSfxAtMs = 0;
     this.finishState = null;
     this.winner = null;
+    this.cupEntries = [];
+    this.cupEntryById.clear();
     this.eliminatedBy = { fall: 0, cut: 0 };
     this.world?.free?.();
     this.world = null;
@@ -658,6 +671,7 @@ export class MarblesGame {
       if (this.phase === 'running') {
         this.finish(marble, nowMs);
       } else {
+        this.recordCupEntry(marble, nowMs);
         // Post-finish: any marble that falls into the cup should disappear too.
         this.removeFromWorld(marble, nowMs, { hideImmediately: true });
       }
@@ -905,6 +919,7 @@ export class MarblesGame {
   private finish(winner: MarbleRuntime, nowMs: number) {
     if (this.phase !== 'running') return;
     if (winner.isEliminated) return;
+    this.recordCupEntry(winner, nowMs);
     // Remove the winner marble from the physics world immediately so it can't bounce out and affect ranks.
     // (Winner UI is preserved via `this.winner` snapshot.)
     this.removeFromWorld(winner, nowMs, { hideImmediately: true });
@@ -924,6 +939,14 @@ export class MarblesGame {
     this.camera.shakeUntilMs = nowMs + ms('350ms');
     this.camera.shakeAmp = 10;
     this.emitUi(true, winner);
+  }
+
+  private recordCupEntry(m: MarbleRuntime, nowMs: number) {
+    const id = m.participant.id;
+    if (this.cupEntryById.has(id)) return;
+    const e: CupEntry = { id, name: m.participant.name, colorHex: m.participant.colorHex, atMs: nowMs };
+    this.cupEntryById.set(id, e);
+    this.cupEntries.push(e);
   }
 
   private removeFromWorld(m: MarbleRuntime, nowMs: number, opts?: { hideImmediately?: boolean } | undefined) {
@@ -1091,20 +1114,39 @@ export class MarblesGame {
     const eliminatedCount = this.eliminatedBy.fall + this.eliminatedBy.cut;
     const sortedAll = alive.slice().sort((a, b) => b.progressY - a.progressY);
     this.updateRankThresholds(sortedAll);
-    const sorted = sortedAll.slice(0, 10);
 
     const focusId = this.camera.focusId;
     const streamer = this.streamerPickName;
 
-    const top10: LeaderRow[] = sorted.map((m, idx) => ({
-      rank: idx + 1,
-      id: m.participant.id,
-      name: m.participant.name,
-      colorHex: m.participant.colorHex,
-      progressY: m.progressY,
-      isStreamerPick: Boolean(streamer && m.participant.name === streamer),
-      isFocusTarget: Boolean(focusId && m.participant.id === focusId),
-    }));
+    // Ranking: cup entrants first (in entry order), then y-based progress for everyone else.
+    const top10: LeaderRow[] = [];
+    for (let i = 0; i < this.cupEntries.length && top10.length < 10; i += 1) {
+      const e = this.cupEntries[i];
+      top10.push({
+        rank: top10.length + 1,
+        id: e.id,
+        name: e.name,
+        colorHex: e.colorHex,
+        progressY: CUP_Y,
+        isStreamerPick: Boolean(streamer && e.name === streamer),
+        isFocusTarget: Boolean(focusId && e.id === focusId),
+      });
+    }
+    const remaining = 10 - top10.length;
+    if (remaining > 0) {
+      const sorted = sortedAll.slice(0, remaining);
+      for (const m of sorted) {
+        top10.push({
+          rank: top10.length + 1,
+          id: m.participant.id,
+          name: m.participant.name,
+          colorHex: m.participant.colorHex,
+          progressY: m.progressY,
+          isStreamerPick: Boolean(streamer && m.participant.name === streamer),
+          isFocusTarget: Boolean(focusId && m.participant.id === focusId),
+        });
+      }
+    }
 
     const win = winner
       ? {
