@@ -9,6 +9,7 @@ import { MarblesGame } from './marbles-game';
 import type { Participant } from './participants';
 import { buildParticipants, makeAutoNames, parseNamesFromTextarea } from './participants';
 import { MarblesSfx } from './sfx';
+import { VIEW_H, VIEW_W } from './view';
 
 type SetupMode = 'paste' | 'auto';
 
@@ -20,11 +21,11 @@ function getNames(args: { setupMode: SetupMode; namesText: string; autoCount: nu
 function drawIdleScene(args: { PIXI: typeof import('pixi.js'); app: import('pixi.js').Application }) {
   args.app.stage.removeChildren();
   const g = new args.PIXI.Graphics()
-    .roundRect(0, 0, 1280, 720, 24)
+    .roundRect(0, 0, VIEW_W, VIEW_H, 24)
     .fill({ color: 0x0b0b0c })
     .stroke({ color: 0x2a2a2a, width: 2 });
   const title = new args.PIXI.Text({
-    text: '구슬 레이스 프로토타입이에요',
+    text: '구슬 레이스예요',
     style: {
       fontFamily: 'var(--font-geist-sans)',
       fontSize: 32,
@@ -46,6 +47,10 @@ function drawIdleScene(args: { PIXI: typeof import('pixi.js'); app: import('pixi
   args.app.stage.addChild(g, title, sub);
 }
 
+function clamp(n: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, n));
+}
+
 export function MarblesPrototype() {
   const canvasWrapRef = useRef<HTMLDivElement | null>(null);
   const videoShellRef = useRef<HTMLDivElement | null>(null);
@@ -60,12 +65,13 @@ export function MarblesPrototype() {
   const [setupMode, setSetupMode] = useState<SetupMode>('auto');
   const [autoCount, setAutoCount] = useState(1000);
   const [namesText, setNamesText] = useState('');
-  const [streamerPick, setStreamerPick] = useState('');
+  const [highlightName, setHighlightName] = useState('');
   const [uiSnap, setUiSnap] = useState<MarblesUiSnapshot | null>(null);
   const [phase, setPhase] = useState<'setup' | 'running' | 'finished'>('setup');
   const [focusFeedback, setFocusFeedback] = useState<string | null>(null);
   const [soundOn, setSoundOn] = useState(true);
   const [gravityY, setGravityY] = useState(1000);
+  const [minRoundSec, setMinRoundSec] = useState(60);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const dragRef = useRef<
     | {
@@ -110,8 +116,8 @@ export function MarblesPrototype() {
       const PIXI = await import('pixi.js');
       const app = new PIXI.Application();
       await app.init({
-        width: 1280,
-        height: 720,
+        width: VIEW_W,
+        height: VIEW_H,
         background: '#0a0a0a',
         backgroundAlpha: 1,
         clearBeforeRender: true,
@@ -157,8 +163,8 @@ export function MarblesPrototype() {
   const canStart = isClientReady && isWasmReady;
 
   useEffect(() => {
-    gameRef.current?.setStreamerPickName(streamerPick);
-  }, [streamerPick]);
+    gameRef.current?.setHighlightName(highlightName);
+  }, [highlightName]);
 
   useEffect(() => {
     function onFsChange() {
@@ -202,9 +208,10 @@ export function MarblesPrototype() {
 
     game.start({
       participants,
-      streamerPickName: streamerPick,
+      highlightName,
       sfx,
       gravityY,
+      minRoundMs: ms(`${minRoundSec}s`),
       onUi: (snap) => {
         setUiSnap(snap);
         setPhase(snap.phase === 'running' ? 'running' : snap.phase === 'finished' ? 'finished' : 'setup');
@@ -216,7 +223,7 @@ export function MarblesPrototype() {
     <div className="min-h-dvh bg-zinc-950 text-zinc-50">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-8">
         <header className="flex flex-col gap-2">
-          <h1 className="text-2xl font-semibold tracking-tight">구슬 레이스 프로토타입</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">구슬 레이스</h1>
           <p className="text-sm leading-6 text-zinc-400">
             {uiHint} {phase === 'running' ? '지금 달리고 있어요.' : ''}
           </p>
@@ -267,7 +274,7 @@ export function MarblesPrototype() {
                 <span className="text-sm text-zinc-300">닉네임을 줄바꿈으로 붙여 넣어 주세요</span>
                 <textarea
                   className="min-h-40 resize-y rounded-xl border border-white/10 bg-zinc-950 px-3 py-2 text-sm leading-6 outline-none focus:border-white/30"
-                  placeholder={'예)\n치즈\n고양이\n시청자0007'}
+                  placeholder={'예)\n치즈\n고양이\n참가자0007'}
                   value={namesText}
                   onChange={(e) => setNamesText(e.target.value)}
                 />
@@ -275,20 +282,20 @@ export function MarblesPrototype() {
             )}
 
             <label className="flex flex-col gap-2">
-              <span className="text-sm text-zinc-300">스트리머 지정 닉네임(후광 + Top10 강조예요)</span>
+              <span className="text-sm text-zinc-300">강조 닉네임(후광 + Top10 강조예요)</span>
               <div className="flex gap-2">
                 <input
                   className="h-10 flex-1 rounded-xl border border-white/10 bg-zinc-950 px-3 text-sm outline-none focus:border-white/30"
                   placeholder="예: 치즈"
-                  value={streamerPick}
-                  onChange={(e) => setStreamerPick(e.target.value)}
+                  value={highlightName}
+                  onChange={(e) => setHighlightName(e.target.value)}
                 />
                 <button
                   type="button"
                   className="h-10 rounded-xl border border-white/10 px-3 text-sm text-zinc-200 disabled:opacity-40"
                   disabled={phase !== 'running'}
                   onClick={() => {
-                    const ok = gameRef.current?.focusByName(streamerPick) ?? false;
+                    const ok = gameRef.current?.focusByName(highlightName) ?? false;
                     setFocusFeedback(ok ? '포커스했어요' : '찾을 수 없어요');
                     window.setTimeout(() => setFocusFeedback(null), ms('2s'));
                   }}
@@ -333,6 +340,24 @@ export function MarblesPrototype() {
               <div className="text-xs text-zinc-500">너무 빠르면 낮추고, 답답하면 올려 주세요.</div>
             </label>
 
+            <label className="flex flex-col gap-2 rounded-xl border border-white/10 bg-zinc-950 px-3 py-2">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-zinc-300">자동 종료 최소 시간</div>
+                <div className="text-xs tabular-nums text-zinc-400">{minRoundSec}초</div>
+              </div>
+              <input
+                className="w-full accent-white"
+                type="range"
+                min={10}
+                max={180}
+                step={5}
+                value={minRoundSec}
+                disabled={phase === 'running'}
+                onChange={(e) => setMinRoundSec(Number(e.target.value))}
+              />
+              <div className="text-xs text-zinc-500">이 시간 전에는 완주가 나와도 끝나지 않아요.</div>
+            </label>
+
             <div className="flex gap-2">
               <button
                 type="button"
@@ -367,30 +392,36 @@ export function MarblesPrototype() {
                     <div className="text-zinc-500">경과 {Math.max(0, Math.round(uiSnap.elapsedMs / ms('1s')))}초</div>
                   </div>
                 ) : null}
-                {uiSnap.cut ? (
-                  <div className="mt-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="font-medium text-zinc-200">체크포인트 {uiSnap.cut.checkpointNumber} 컷이에요</div>
-                      <div className="text-xs tabular-nums text-zinc-300">
-                        {Math.max(0, Math.ceil(uiSnap.cut.remainingMs / ms('1s')))}초
+                {/* Reserve ONE slot to avoid CLS when notices appear/disappear */}
+                <div className="mt-2 min-h-[68px]">
+                  {uiSnap.slowMo && uiSnap.slowMo.remainingMs > 0 ? (
+                    <div className="h-[68px] rounded-xl border border-amber-200/10 bg-amber-400/10 px-3 py-2 text-sm">
+                      <div className="flex items-center justify-between">
+                        <div className="font-semibold text-amber-200">골든 모먼트예요</div>
+                        <div className="text-xs tabular-nums text-amber-100/80">
+                          {Math.max(0, Math.ceil(uiSnap.slowMo.remainingMs / ms('1s')))}초
+                        </div>
+                      </div>
+                      <div className="mt-1 text-xs text-amber-100/70">결승 직전 초근접 경합이에요.</div>
+                    </div>
+                  ) : uiSnap.cut ? (
+                    <div className="h-[68px] rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="font-medium text-zinc-200">
+                          체크포인트 {uiSnap.cut.checkpointNumber} 컷이에요
+                        </div>
+                        <div className="text-xs tabular-nums text-zinc-300">
+                          {Math.max(0, Math.ceil(uiSnap.cut.remainingMs / ms('1s')))}초
+                        </div>
+                      </div>
+                      <div className="mt-1 text-xs text-zinc-400">
+                        하위 {uiSnap.cut.cutCount.toLocaleString()}명이 컷될 거예요.
                       </div>
                     </div>
-                    <div className="mt-1 text-xs text-zinc-400">
-                      하위 {uiSnap.cut.cutCount.toLocaleString()}명이 컷될 거예요.
-                    </div>
-                  </div>
-                ) : null}
-                {uiSnap.slowMo && uiSnap.slowMo.remainingMs > 0 ? (
-                  <div className="mt-2 rounded-xl border border-amber-200/10 bg-amber-400/10 px-3 py-2 text-sm">
-                    <div className="flex items-center justify-between">
-                      <div className="font-semibold text-amber-200">골든 모먼트예요</div>
-                      <div className="text-xs tabular-nums text-amber-100/80">
-                        {Math.max(0, Math.ceil(uiSnap.slowMo.remainingMs / ms('1s')))}초
-                      </div>
-                    </div>
-                    <div className="mt-1 text-xs text-amber-100/70">결승 직전 초근접 경합이에요.</div>
-                  </div>
-                ) : null}
+                  ) : (
+                    <div className="h-[68px] rounded-xl border border-white/10 bg-white/0" />
+                  )}
+                </div>
                 <ol className="mt-2 flex flex-col gap-1">
                   {uiSnap.top10.map((r) => (
                     <li
@@ -403,12 +434,21 @@ export function MarblesPrototype() {
                         <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: r.colorHex }} />
                         <span className="truncate">
                           {r.name}
-                          {r.isStreamerPick ? ' (스트리머)' : ''}
+                          {r.isHighlighted ? ' (강조)' : ''}
                         </span>
                       </div>
-                      {uiSnap.winner?.id === r.id ? (
-                        <span className="text-xs font-semibold text-emerald-300">우승</span>
-                      ) : null}
+                      <span
+                        className={[
+                          'w-10 text-right text-xs font-semibold tabular-nums',
+                          uiSnap.winner?.id === r.id
+                            ? 'text-emerald-300'
+                            : r.didFinish
+                            ? 'text-emerald-200'
+                            : 'text-transparent',
+                        ].join(' ')}
+                      >
+                        {uiSnap.winner?.id === r.id ? '우승' : r.didFinish ? '완주' : '완주'}
+                      </span>
                     </li>
                   ))}
                 </ol>
@@ -447,7 +487,9 @@ export function MarblesPrototype() {
           <section className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-medium">프리뷰(16:9)</h2>
-              <div className="text-xs text-zinc-400">1280×720 내부 해상도로 고정돼요</div>
+              <div className="text-xs text-zinc-400">
+                {VIEW_W}×{VIEW_H} 내부 해상도로 고정돼요
+              </div>
             </div>
             <div
               className="relative aspect-video overflow-hidden rounded-2xl border border-white/10 bg-black"
@@ -503,6 +545,63 @@ export function MarblesPrototype() {
                   {isFullscreen ? '전체화면 종료' : '전체화면'}
                 </button>
               </div>
+
+              {uiSnap?.camera && uiSnap.world
+                ? (() => {
+                    const world = uiSnap.world;
+                    const cam = uiSnap.camera;
+                    return (
+                      <details className="group absolute bottom-3 right-3" onPointerDown={(e) => e.stopPropagation()}>
+                        <summary className="list-none [&::-webkit-details-marker]:hidden">
+                          <span className="inline-flex h-9 items-center gap-2 rounded-xl border border-white/10 bg-black/55 px-3 text-xs font-medium text-zinc-200 backdrop-blur">
+                            미니맵
+                            <span className="text-[10px] text-zinc-400 group-open:hidden">열기</span>
+                            <span className="text-[10px] text-zinc-400 hidden group-open:inline">닫기</span>
+                          </span>
+                        </summary>
+                        <div className="mt-2 w-[172px] rounded-xl border border-white/10 bg-black/55 p-2 backdrop-blur">
+                          <div className="flex items-center justify-between">
+                            <div className="text-xs font-medium text-zinc-200">클릭 포커스예요</div>
+                            <div className="text-[10px] text-zinc-400">{Math.round(ms('4s') / 1000)}초</div>
+                          </div>
+                          <button
+                            type="button"
+                            className="relative mt-2 block w-full overflow-hidden rounded-lg border border-white/10 bg-zinc-950"
+                            style={{ aspectRatio: '3 / 5' }}
+                            onPointerDown={(e) => e.stopPropagation()}
+                            onClick={(e) => {
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              const nx = clamp((e.clientX - rect.left) / rect.width, 0, 1);
+                              const ny = clamp((e.clientY - rect.top) / rect.height, 0, 1);
+                              const worldX = nx * world.w;
+                              const worldY = ny * world.h;
+                              const targetX = worldX - world.screenW / 2;
+                              const targetY = worldY - world.screenH / 2;
+                              gameRef.current?.jumpCameraTo(targetX, targetY, ms('4s'));
+                            }}
+                          >
+                            <div className="absolute inset-0 bg-linear-to-b from-white/0 via-white/0 to-white/5" />
+                            {/* Viewport */}
+                            <div
+                              className="absolute rounded border border-emerald-300/60 bg-emerald-300/5"
+                              style={{
+                                left: `${(cam.x / world.w) * 100}%`,
+                                top: `${(cam.y / world.h) * 100}%`,
+                                width: `${(world.screenW / world.w) * 100}%`,
+                                height: `${(world.screenH / world.h) * 100}%`,
+                              }}
+                            />
+                            {/* Finish cup marker (approx) */}
+                            <div
+                              className="absolute left-1/2 h-2 w-2 -translate-x-1/2 rounded-full bg-white/30"
+                              style={{ bottom: `${(120 / world.h) * 100}%` }}
+                            />
+                          </button>
+                        </div>
+                      </details>
+                    );
+                  })()
+                : null}
 
               {uiSnap?.cut ? (
                 <div className="pointer-events-none absolute left-1/2 top-4 w-[min(520px,calc(100%-32px))] -translate-x-1/2 rounded-2xl border border-white/10 bg-black/60 px-4 py-3 backdrop-blur">

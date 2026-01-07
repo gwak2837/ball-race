@@ -72,13 +72,13 @@ export function parseNamesFromTextarea(value: string): string[] {
 export function makeAutoNames(count: number): string[] {
   const safeCount = Math.max(1, Math.min(1000, count));
   return Array.from({ length: safeCount }, (_, i) => {
-    return `시청자${String(i + 1).padStart(4, '0')}`;
+    return `참가자${String(i + 1).padStart(4, '0')}`;
   });
 }
 
 export function buildParticipants(names: string[]): Participant[] {
   return names.map((raw, idx) => {
-    const name = raw.trim() || `시청자${String(idx + 1).padStart(4, '0')}`;
+    const name = raw.trim() || `참가자${String(idx + 1).padStart(4, '0')}`;
     return {
       id: `${idx}-${stableHash32(name)}`,
       name,

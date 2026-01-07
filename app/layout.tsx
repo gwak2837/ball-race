@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: '구슬 레이스 프로토타입',
-  description: '스트리머용 1,000명 구슬 레이스 도파민 프로토타입이에요.',
+  title: '구슬 레이스',
+  description: '구슬 레이스예요.',
 };
 
 export default function RootLayout({
