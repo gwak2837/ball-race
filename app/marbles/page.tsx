@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 
-import { MarblesPrototype } from './marbles-prototype';
+import { MarblesClient } from './marbles-client';
 
 export const metadata: Metadata = {
   title: '구슬 레이스',
@@ -8,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function MarblesPage() {
-  return <MarblesPrototype />;
+  return <MarblesClient />;
 }

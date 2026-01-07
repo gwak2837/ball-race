@@ -8,8 +8,7 @@ export class MarblesSfx {
   enable() {
     if (this.ctx) return;
     type WebkitWindow = Window & { webkitAudioContext?: typeof AudioContext };
-    const AudioContextCtor =
-      window.AudioContext || (window as WebkitWindow).webkitAudioContext;
+    const AudioContextCtor = window.AudioContext || (window as WebkitWindow).webkitAudioContext;
     if (!AudioContextCtor) return;
     const ctx = new AudioContextCtor();
     const master = ctx.createGain();
@@ -37,7 +36,18 @@ export class MarblesSfx {
     return this.master;
   }
 
-  private playTone(args: {
+  private playTone({
+    type,
+    freqHz,
+    gain,
+    attackMs,
+    decayMs,
+    sustain,
+    releaseMs,
+    durationMs,
+    detuneCents,
+    filter,
+  }: {
     type: OscillatorType;
     freqHz: number;
     gain: number;
@@ -55,27 +65,24 @@ export class MarblesSfx {
     if (!ctx || !master || t0 === null) return;
 
     const osc = ctx.createOscillator();
-    osc.type = args.type;
-    osc.frequency.value = args.freqHz;
-    if (args.detuneCents) osc.detune.value = args.detuneCents;
+    osc.type = type;
+    osc.frequency.value = freqHz;
+    if (detuneCents) osc.detune.value = detuneCents;
 
     const g = ctx.createGain();
     g.gain.setValueAtTime(0.0001, t0);
-    g.gain.exponentialRampToValueAtTime(Math.max(0.0001, args.gain), t0 + args.attackMs / 1000);
-    g.gain.exponentialRampToValueAtTime(
-      Math.max(0.0001, args.gain * args.sustain),
-      t0 + (args.attackMs + args.decayMs) / 1000,
-    );
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0001, gain), t0 + attackMs / 1000);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0001, gain * sustain), t0 + (attackMs + decayMs) / 1000);
 
-    const tEnd = t0 + args.durationMs / 1000;
-    g.gain.exponentialRampToValueAtTime(0.0001, tEnd + args.releaseMs / 1000);
+    const tEnd = t0 + durationMs / 1000;
+    g.gain.exponentialRampToValueAtTime(0.0001, tEnd + releaseMs / 1000);
 
     let node: AudioNode = osc;
-    if (args.filter) {
+    if (filter) {
       const f = ctx.createBiquadFilter();
-      f.type = args.filter.type;
-      f.frequency.value = args.filter.freqHz;
-      f.Q.value = args.filter.q;
+      f.type = filter.type;
+      f.frequency.value = filter.freqHz;
+      f.Q.value = filter.q;
       node.connect(f);
       node = f;
     }
@@ -84,7 +91,7 @@ export class MarblesSfx {
     g.connect(master);
 
     osc.start(t0);
-    osc.stop(tEnd + args.releaseMs / 1000);
+    osc.stop(tEnd + releaseMs / 1000);
   }
 
   playClick(intensity01: number) {
@@ -238,5 +245,3 @@ export class MarblesSfx {
     });
   }
 }
-
-

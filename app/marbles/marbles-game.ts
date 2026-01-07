@@ -172,10 +172,12 @@ function hexToPixiTint(hex: string): number {
   return Number.parseInt(v, 16);
 }
 
-function maybeCreateLabel(args: { PIXI: typeof import('pixi.js'); marble: MarbleRuntime }): PIXI.Text {
-  if (args.marble.label) return args.marble.label;
-  const t = new args.PIXI.Text({
-    text: args.marble.participant.initials,
+function maybeCreateLabel({ PIXI, marble }: { PIXI: typeof import('pixi.js'); marble: MarbleRuntime }): PIXI.Text {
+  if (marble.label) {
+    return marble.label;
+  }
+  const t = new PIXI.Text({
+    text: marble.participant.initials,
     style: {
       fontFamily: 'var(--font-geist-sans)',
       fontSize: 10,
@@ -186,8 +188,8 @@ function maybeCreateLabel(args: { PIXI: typeof import('pixi.js'); marble: Marble
   });
   t.anchor.set(0.5);
   t.y = 0;
-  args.marble.display.addChild(t);
-  args.marble.label = t;
+  marble.display.addChild(t);
+  marble.label = t;
   return t;
 }
 
@@ -1600,14 +1602,15 @@ export class MarblesGame {
     // 센서라서 포켓을 만들지 않고, 시간만 늘려줘요.
     const jetsG = new this.PIXI.Graphics();
     worldContainer.addChild(jetsG);
-    const addJet = (args: { y: number; activeUntilMs: number; power: number }) => {
+    type JetInput = { y: number; activeUntilMs: number; power: number };
+    const addJet = ({ y, activeUntilMs, power }: JetInput) => {
       const halfH = 26;
-      // NOTE: do NOT create a Rapier sensor here.
+      // NOTE: 여기서는 Rapier 센서를 만들지 않아요.
       // Sensors can retrigger multiple times when lots of balls pile up, which feels like "time-based global gating".
       // Jet behavior is implemented deterministically in `stepOnce()` (per-marble, with jackpot passes).
-      this.jetBands.push({ y: args.y, activeUntilMs: args.activeUntilMs, upVel: args.power });
+      this.jetBands.push({ y, activeUntilMs, upVel: power });
       jetsG
-        .roundRect(120, args.y - halfH, 1040, halfH * 2, 18)
+        .roundRect(120, y - halfH, 1040, halfH * 2, 18)
         .fill({ color: 0x22d3ee, alpha: 0.04 })
         .stroke({ color: 0x22d3ee, width: 1, alpha: 0.12 });
     };
@@ -1673,7 +1676,7 @@ export class MarblesGame {
 
     // Moving obstacles (도파민용) - 회전/슬라이더
     const obstacleStroke = { color: 0x0b0b0c, width: 2, alpha: 0.55 } as const;
-    const addRotor = (args: {
+    type RotorInput = {
       x: number;
       y: number;
       halfW: number;
@@ -1683,17 +1686,18 @@ export class MarblesGame {
       startAfterMs?: number | undefined;
       baseAngle?: number | undefined;
       angleAmplitude?: number | undefined;
-    }) => {
-      const rb = this.R.RigidBodyDesc.kinematicPositionBased().setTranslation(args.x, args.y);
+    };
+    const addRotor = ({ x, y, halfW, halfH, speed, phase, startAfterMs, baseAngle, angleAmplitude }: RotorInput) => {
+      const rb = this.R.RigidBodyDesc.kinematicPositionBased().setTranslation(x, y);
       const body = world.createRigidBody(rb);
       // Big bounce obstacle: high restitution for pinball-like dopamine.
-      const cd = this.R.ColliderDesc.cuboid(args.halfW, args.halfH).setFriction(0.08).setRestitution(0.86);
+      const cd = this.R.ColliderDesc.cuboid(halfW, halfH).setFriction(0.08).setRestitution(0.86);
       const collider = world.createCollider(cd, body);
 
       const display = new this.PIXI.Container();
-      display.position.set(args.x, args.y);
+      display.position.set(x, y);
       const g = new this.PIXI.Graphics()
-        .roundRect(-args.halfW, -args.halfH, args.halfW * 2, args.halfH * 2, args.halfH)
+        .roundRect(-halfW, -halfH, halfW * 2, halfH * 2, halfH)
         .fill({ color: 0xf97316, alpha: 0.22 })
         .stroke(obstacleStroke);
       display.addChild(g);
@@ -1704,20 +1708,20 @@ export class MarblesGame {
         collider,
         display,
         kind: 'rotor',
-        baseX: args.x,
-        baseY: args.y,
-        halfW: args.halfW,
-        halfH: args.halfH,
-        phase: args.phase,
-        speed: args.speed,
+        baseX: x,
+        baseY: y,
+        halfW,
+        halfH,
+        phase,
+        speed,
         amplitude: 0,
-        startAfterMs: args.startAfterMs,
-        baseAngle: args.baseAngle ?? Math.PI / 4,
-        angleAmplitude: args.angleAmplitude ?? 0.6,
+        startAfterMs,
+        baseAngle: baseAngle ?? Math.PI / 4,
+        angleAmplitude: angleAmplitude ?? 0.6,
       });
     };
 
-    const addSlider = (args: {
+    type SliderInput = {
       x: number;
       y: number;
       halfW: number;
@@ -1727,17 +1731,18 @@ export class MarblesGame {
       phase: number;
       startAfterMs?: number | undefined;
       baseAngle?: number | undefined;
-    }) => {
-      const rb = this.R.RigidBodyDesc.kinematicPositionBased().setTranslation(args.x, args.y);
+    };
+    const addSlider = ({ x, y, halfW, halfH, amplitude, speed, phase, startAfterMs }: SliderInput) => {
+      const rb = this.R.RigidBodyDesc.kinematicPositionBased().setTranslation(x, y);
       const body = world.createRigidBody(rb);
       // Big bounce obstacle: high restitution for pinball-like dopamine.
-      const cd = this.R.ColliderDesc.cuboid(args.halfW, args.halfH).setFriction(0.1).setRestitution(0.72);
+      const cd = this.R.ColliderDesc.cuboid(halfW, halfH).setFriction(0.1).setRestitution(0.72);
       const collider = world.createCollider(cd, body);
 
       const display = new this.PIXI.Container();
-      display.position.set(args.x, args.y);
+      display.position.set(x, y);
       const g = new this.PIXI.Graphics()
-        .roundRect(-args.halfW, -args.halfH, args.halfW * 2, args.halfH * 2, Math.min(args.halfW, args.halfH))
+        .roundRect(-halfW, -halfH, halfW * 2, halfH * 2, Math.min(halfW, halfH))
         .fill({ color: 0x22d3ee, alpha: 0.18 })
         .stroke(obstacleStroke);
       display.addChild(g);
@@ -1748,14 +1753,14 @@ export class MarblesGame {
         collider,
         display,
         kind: 'slider',
-        baseX: args.x,
-        baseY: args.y,
-        halfW: args.halfW,
-        halfH: args.halfH,
-        phase: args.phase,
-        speed: args.speed,
-        amplitude: args.amplitude,
-        startAfterMs: args.startAfterMs,
+        baseX: x,
+        baseY: y,
+        halfW,
+        halfH,
+        phase,
+        speed,
+        amplitude,
+        startAfterMs,
         baseAngle: 0,
         angleAmplitude: 0,
       });
