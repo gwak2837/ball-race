@@ -23,7 +23,9 @@ export interface LeaderRow {
 export interface MarblesUiSnapshot {
   phase: MarblesPhase;
   elapsedMs: number;
+  totalCount: number;
   aliveCount: number;
+  finishedCount: number;
   eliminatedCount: number;
   eliminatedBy?: { fall: number; cut: number } | undefined;
   top10: LeaderRow[];
@@ -31,6 +33,7 @@ export interface MarblesUiSnapshot {
   world?: { w: number; h: number; screenW: number; screenH: number } | undefined;
   cut?: { checkpointNumber: number; remainingMs: number; cutCount: number } | undefined;
   slowMo?: { remainingMs: number } | undefined;
+  fastForward?: { scale: number } | undefined;
   focus?: { name: string; remainingMs: number } | undefined;
   postFinish?: { remainingMs: number } | undefined;
   winner?: { id: string; name: string; colorHex: string } | undefined;
@@ -144,6 +147,9 @@ const CUP_Y = WORLD_H - 120;
 
 const DEFAULT_GRAVITY_Y = 1000;
 const DEFAULT_MIN_ROUND_MS = ms('60s');
+
+const TOP10_FINISHERS_TARGET = 10;
+const FAST_FORWARD_SCALE = 2;
 
 const MARBLE_R = 7;
 const WALL_THICK = 40;
@@ -260,6 +266,7 @@ export class MarblesGame {
   private timeScale = 1;
   private slowMoUntilMs = 0;
   private slowMoCooldownUntilMs = 0;
+  private fastForwardOn = false;
 
   private finishState: { winnerId: string; endsAtMs: number } | null = null;
   private winner: { id: string; name: string; colorHex: string } | null = null;
@@ -375,6 +382,7 @@ export class MarblesGame {
     this.timeScale = 1;
     this.slowMoUntilMs = 0;
     this.slowMoCooldownUntilMs = 0;
+    this.fastForwardOn = false;
     this.bottom30MaxProgress = Number.NEGATIVE_INFINITY;
     this.top10MinProgress = Number.POSITIVE_INFINITY;
 
@@ -413,6 +421,7 @@ export class MarblesGame {
     this.timeScale = 1;
     this.slowMoUntilMs = 0;
     this.slowMoCooldownUntilMs = 0;
+    this.fastForwardOn = false;
     this.bottom30MaxProgress = Number.NEGATIVE_INFINITY;
     this.top10MinProgress = Number.POSITIVE_INFINITY;
 
@@ -809,7 +818,7 @@ export class MarblesGame {
       }
     }
 
-    // Near-miss slow motion (결승 근처 Top3 초근접)
+    // NOTE: 골든 모먼트(슬로모)는 결승 근처에서 “초근접 경합”일 때만 발동해요.
     if (this.phase === 'running' && this.timeScale === 1) {
       this.maybeStartSlowMo(nowMs, [top1, top2, top3]);
     }
@@ -1106,30 +1115,52 @@ export class MarblesGame {
   }
 
   private maybeStartSlowMo(nowMs: number, top3: Array<MarbleRuntime | null>) {
-    if (nowMs < this.slowMoCooldownUntilMs) return;
-    if (this.timeScale !== 1) return;
+    // NOTE: 발동 조건(현재 튜닝 값)
+    // - TOP10 완주 전까지만 (cupEntries < TOP10_FINISHERS_TARGET)
+    // - Top3 중 2명 이상이 결승 구간(finalStartY) 진입
+    // - 두 선수의 y 간격이 70px 이하
+    // - 그중 최소 1명이 컵 중심에서 240px 안
+    //
+    // 발동 시: 0.25배속으로 2.2초, 이후 7초 쿨다운이에요.
+    if (nowMs < this.slowMoCooldownUntilMs) {
+      return;
+    }
+    if (this.timeScale !== 1) {
+      return;
+    }
+    if (this.cupEntries.length >= TOP10_FINISHERS_TARGET) {
+      return;
+    }
 
     const cupX = CUP_X;
     const cupY = CUP_Y;
     const finalStartY = CUP_Y - 520;
-
     const contenders = top3.filter((m): m is MarbleRuntime => Boolean(m && !m.isEliminated));
     const near = contenders.filter((m) => m.progressY >= finalStartY);
-    if (near.length < 2) return;
+
+    if (near.length < 2) {
+      return;
+    }
 
     const ys = near.map((m) => m.body.translation().y);
     const minY = Math.min(...ys);
     const maxY = Math.max(...ys);
-    if (maxY - minY > 70) return;
+
+    if (maxY - minY > 70) {
+      return;
+    }
 
     const closeToCup = near.some((m) => {
       const p = m.body.translation();
       return Math.hypot(p.x - cupX, p.y - cupY) < 240;
     });
-    if (!closeToCup) return;
 
-    this.timeScale = 0.25;
-    this.slowMoUntilMs = nowMs + ms('2.2s');
+    if (!closeToCup) {
+      return;
+    }
+
+    this.timeScale = 0.2;
+    this.slowMoUntilMs = nowMs + ms('3s');
     this.slowMoCooldownUntilMs = nowMs + ms('7s');
     this.sfx?.playSlowMo();
     this.camera.shakeUntilMs = nowMs + ms('180ms');
@@ -1137,8 +1168,20 @@ export class MarblesGame {
   }
 
   private onCupEntry(m: MarbleRuntime, nowMs: number) {
-    if (m.isEliminated) return;
+    if (m.isEliminated) {
+      return;
+    }
+
     this.recordCupEntry(m, nowMs);
+
+    // Fast-forward: TOP10이 나오면 이후에는 빠르게 마무리해요
+    if (!this.fastForwardOn && this.cupEntries.length >= TOP10_FINISHERS_TARGET) {
+      this.fastForwardOn = true;
+      this.timeScale = FAST_FORWARD_SCALE;
+      this.camera.shakeUntilMs = Math.max(this.camera.shakeUntilMs, nowMs + ms('140ms'));
+      this.camera.shakeAmp = Math.max(this.camera.shakeAmp, 4);
+      this.emitUi(true);
+    }
 
     // First finisher becomes the winner (but we keep the round running until >= 60s).
     if (!this.winner && this.cupEntries.length > 0) {
@@ -1372,6 +1415,8 @@ export class MarblesGame {
     this.lastUiEmitMs = now;
 
     const alive = this.marbles.filter((m) => !m.isEliminated);
+    const totalCount = this.marbles.length;
+    const finishedCount = this.cupEntries.length;
     const eliminatedCount = this.eliminatedBy.fall + this.eliminatedBy.cut;
     const sortedAll = alive.slice().sort((a, b) => b.progressY - a.progressY);
     this.updateRankThresholds(sortedAll);
@@ -1428,6 +1473,7 @@ export class MarblesGame {
       : undefined;
 
     const slowMo = this.timeScale < 1 ? { remainingMs: Math.max(0, this.slowMoUntilMs - now) } : undefined;
+    const fastForward = this.timeScale > 1 ? { scale: this.timeScale } : undefined;
 
     const focus =
       this.camera.mode === 'focus' && this.camera.focusName && now < this.camera.focusUntilMs
@@ -1442,7 +1488,9 @@ export class MarblesGame {
     this.onUi({
       phase: this.phase,
       elapsedMs: Math.round(this.elapsedMs),
+      totalCount,
       aliveCount: alive.length,
+      finishedCount,
       eliminatedCount,
       eliminatedBy: { ...this.eliminatedBy },
       top10,
@@ -1450,6 +1498,7 @@ export class MarblesGame {
       world: { w: WORLD_W, h: WORLD_H, screenW: SCREEN_W, screenH: SCREEN_H },
       cut,
       slowMo,
+      fastForward,
       focus,
       postFinish,
       winner: win,
