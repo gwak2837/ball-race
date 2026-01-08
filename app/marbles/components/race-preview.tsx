@@ -210,7 +210,7 @@ export function RacePreview({ race }: RacePreviewProps) {
           <div className="pointer-events-none absolute left-1/2 top-4 w-[min(520px,calc(100%-32px))] -translate-x-1/2 rounded-2xl border border-amber-200/10 bg-amber-400/10 px-4 py-3 backdrop-blur">
             <div className="flex items-end justify-between gap-4">
               <div className="flex flex-col">
-                <div className="text-sm font-semibold text-amber-200">골든 모먼트예요</div>
+                <div className="text-sm font-semibold text-amber-200">골든 모먼트</div>
                 <div className="text-xs text-amber-100/70">결승 직전 초근접 경합이에요.</div>
               </div>
               <div className="text-2xl font-semibold tabular-nums tracking-tight text-amber-100">
@@ -246,7 +246,7 @@ export function RacePreview({ race }: RacePreviewProps) {
               <span className="font-medium" style={{ color: uiSnap.winner.colorHex }}>
                 {uiSnap.winner.name}
               </span>
-              님이 들어갔어요. 잠깐만 더 볼게요.
+              님이 들어갔어요.
             </div>
           </div>
         ) : null}

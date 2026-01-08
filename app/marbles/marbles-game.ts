@@ -148,6 +148,8 @@ const CUP_Y = WORLD_H - 120
 const DEFAULT_GRAVITY_Y = 1000
 const DEFAULT_MIN_ROUND_MS = ms('60s')
 
+const POST_FINISH_MS = ms('3s')
+
 const TOP10_FINISHERS_TARGET = 10
 const FAST_FORWARD_SCALE = 2
 
@@ -526,16 +528,35 @@ export class MarblesGame {
     if (!this.world || !this.eventQueue || !this.worldContainer) return
 
     const now = performance.now()
+
+    if (this.phase === 'finished') {
+      // Keep emitting UI briefly so post-finish notices can naturally expire,
+      // then stop the ticker to save CPU.
+      this.emitUi(false)
+
+      if (this.finishState && now >= this.finishState.endsAtMs) {
+        this.finishState = null
+        this.emitUi(true)
+        this.app.ticker.remove(this.onTick)
+      }
+      return
+    }
+
     if (this.phase !== 'running') return
 
     const frameMs = clamp(now - this.lastTickMs, 0, ms('50ms'))
     this.lastTickMs = now
     this.accumulatorMs += frameMs
 
-    while (this.accumulatorMs >= FIXED_STEP_MS) {
+    while (this.accumulatorMs >= FIXED_STEP_MS && this.phase === 'running') {
       this.stepOnce(now)
       this.accumulatorMs -= FIXED_STEP_MS
       this.elapsedMs += FIXED_STEP_MS
+    }
+
+    if (this.phase !== 'running') {
+      // Round may end inside the physics step (e.g. cup entry after min time).
+      return
     }
 
     this.updateCamera(now)
@@ -1282,7 +1303,7 @@ export class MarblesGame {
     const first = this.cupEntries[0]
     this.winner = { id: first.id, name: first.name, colorHex: first.colorHex }
     this.phase = 'finished'
-    this.finishState = null
+    this.finishState = { winnerId: first.id, endsAtMs: nowMs + POST_FINISH_MS }
     // Don't override user-driven camera peeks (minimap) when ending.
     if (this.camera.mode === 'auto' && this.worldContainer) {
       this.camera.mode = 'manual'
@@ -1292,8 +1313,9 @@ export class MarblesGame {
       this.worldContainer.x = -this.camera.x
       this.worldContainer.y = -this.camera.y
     }
+    // Ensure visuals (e.g. cup-sink hideImmediately) apply immediately even if the round ended mid-step.
+    this.render(nowMs)
     this.emitUi(true)
-    this.app.ticker.remove(this.onTick)
   }
 
   private recordCupEntry(m: MarbleRuntime, nowMs: number) {
