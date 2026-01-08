@@ -514,6 +514,14 @@ export class MarblesGame {
     this.worldContainer.y = -this.camera.y
   }
 
+  private isInCameraView(x: number, y: number, pad = 0): boolean {
+    const x0 = this.camera.x - pad
+    const y0 = this.camera.y - pad
+    const x1 = this.camera.x + SCREEN_W + pad
+    const y1 = this.camera.y + SCREEN_H + pad
+    return x >= x0 && x <= x1 && y >= y0 && y <= y1
+  }
+
   private readonly onTick = () => {
     if (!this.world || !this.eventQueue || !this.worldContainer) return
 
@@ -547,6 +555,31 @@ export class MarblesGame {
     if (!sfx) return
 
     const elapsedMs = nowMs - this.startedAtMs
+
+    // Focus mode: only play "camera sound" for the focused marble (less noise).
+    const focusId = this.camera.mode === 'focus' ? this.camera.focusId : null
+    if (focusId) {
+      const m = this.marbles.find((x) => !x.isEliminated && x.participant.id === focusId)
+      if (!m) return
+
+      const v = m.body.linvel()
+      const speed = Math.hypot(v.x, v.y)
+      // Map speed -> intensity. We keep a small dead-zone so it's quiet when the marble is slow/stuck.
+      const intensity = clamp((speed - 400) / 3800, 0, 1)
+      if (intensity < 0.14) return
+
+      // Early game limiter: even a single marble can be very jittery right after spawn.
+      const earlyFactor = elapsedMs < ms('8s') ? 1.6 : elapsedMs < ms('16s') ? 1.2 : 1
+
+      const maxInterval = ms('190ms')
+      const minInterval = ms('70ms')
+      const interval = (maxInterval - (maxInterval - minInterval) * intensity) * earlyFactor
+      if (nowMs - this.lastClickAtMs < interval) return
+
+      this.lastClickAtMs = nowMs
+      sfx.playClick(intensity)
+      return
+    }
 
     // Intensity ~= "how chaotic is the current camera view"
     const x0 = this.camera.x
@@ -847,7 +880,7 @@ export class MarblesGame {
       return
     }
     if (kind === 'bomb') {
-      this.tryBomb(sensorHandle, nowMs)
+      this.tryBomb(sensorHandle, marble, nowMs)
       return
     }
     if (kind === 'kicker') {
@@ -920,6 +953,7 @@ export class MarblesGame {
     if (m.warpUsed) return
     if (!this.isBottom30(m)) return
 
+    const p0 = m.body.translation()
     m.warpUsed = true
     const x = 585 + Math.random() * 110
     const y = 7700
@@ -929,23 +963,33 @@ export class MarblesGame {
     m.body.setAngvel(0, true)
     m.progressY = Math.max(m.progressY, y)
 
-    this.sfx?.playWarp()
-    this.camera.shakeUntilMs = nowMs + ms('220ms')
-    this.camera.shakeAmp = 6
+    const focusId = this.camera.mode === 'focus' ? this.camera.focusId : null
+    const allowSfx = !focusId || m.participant.id === focusId
+    if (allowSfx && this.isInCameraView(p0.x, p0.y, 120)) {
+      this.sfx?.playWarp()
+      this.camera.shakeUntilMs = nowMs + ms('220ms')
+      this.camera.shakeAmp = 6
+    }
   }
 
   private tryBoost(m: MarbleRuntime, nowMs: number) {
     if (nowMs < m.boostCooldownUntilMs) return
     m.boostCooldownUntilMs = nowMs + ms('900ms')
 
+    const p0 = m.body.translation()
+    const inView = this.isInCameraView(p0.x, p0.y, 120)
+    const focusId = this.camera.mode === 'focus' ? this.camera.focusId : null
+    const allowSfx = !focusId || m.participant.id === focusId
     const v = m.body.linvel()
     if (this.isBottom30(m)) {
       // Catch-up boost
       const vy = Math.max(v.y, 3000)
       m.body.setLinvel({ x: v.x * 0.6, y: vy }, true)
-      this.sfx?.playBoost('catchup')
-      this.camera.shakeUntilMs = nowMs + ms('120ms')
-      this.camera.shakeAmp = 3
+      if (inView && allowSfx) {
+        this.sfx?.playBoost('catchup')
+        this.camera.shakeUntilMs = nowMs + ms('120ms')
+        this.camera.shakeAmp = 3
+      }
       return
     }
     if (this.isTop10(m)) {
@@ -953,12 +997,12 @@ export class MarblesGame {
       const vy = v.y * 0.35
       const wobble = (Math.random() * 2 - 1) * 420
       m.body.setLinvel({ x: v.x * 0.4 + wobble, y: vy }, true)
-      this.sfx?.playBoost('debuff')
+      if (inView && allowSfx) this.sfx?.playBoost('debuff')
       return
     }
     // Middle pack: mild boost
     m.body.setLinvel({ x: v.x * 0.7, y: Math.max(v.y, 2500) }, true)
-    this.sfx?.playBoost('mid')
+    if (inView && allowSfx) this.sfx?.playBoost('mid')
   }
 
   private trySlow(sensorHandle: number, m: MarbleRuntime, nowMs: number) {
@@ -967,12 +1011,16 @@ export class MarblesGame {
     if (nowMs - pad.lastAtMs < pad.cooldownMs) return
     pad.lastAtMs = nowMs
 
+    const p0 = m.body.translation()
+    const inView = this.isInCameraView(p0.x, p0.y, 120)
+    const focusId = this.camera.mode === 'focus' ? this.camera.focusId : null
+    const allowSfx = !focusId || m.participant.id === focusId
     // A dedicated deceleration pad: slows everyone a bit, top10 even more.
     const factor = this.isTop10(m) ? Math.min(0.25, pad.factor * 0.6) : pad.factor
     const v = m.body.linvel()
     m.body.setLinvel({ x: v.x * 0.55, y: v.y * factor }, true)
     m.body.setAngvel((Math.random() * 2 - 1) * 6, true)
-    this.sfx?.playBoost('debuff')
+    if (inView && allowSfx) this.sfx?.playBoost('debuff')
   }
 
   private tryMagnet(sensorHandle: number, m: MarbleRuntime, nowMs: number) {
@@ -984,18 +1032,24 @@ export class MarblesGame {
     // Debuff leaders: only top10 gets "held" by the magnet.
     if (!this.isTop10(m)) return
 
+    const p0 = m.body.translation()
+    const inView = this.isInCameraView(p0.x, p0.y, 140)
+    const focusId = this.camera.mode === 'focus' ? this.camera.focusId : null
+    const allowSfx = !focusId || m.participant.id === focusId
     m.magnetUntilMs = nowMs + pit.durationMs
     m.magnetX = pit.x
     m.magnetY = pit.pullY
     // Immediate slowdown so it feels like a trap.
     const v = m.body.linvel()
     m.body.setLinvel({ x: v.x * 0.25, y: v.y * 0.18 }, true)
-    this.sfx?.playBoost('debuff')
-    this.camera.shakeUntilMs = Math.max(this.camera.shakeUntilMs, nowMs + ms('120ms'))
-    this.camera.shakeAmp = Math.max(this.camera.shakeAmp, 3)
+    if (inView && allowSfx) {
+      this.sfx?.playBoost('debuff')
+      this.camera.shakeUntilMs = Math.max(this.camera.shakeUntilMs, nowMs + ms('120ms'))
+      this.camera.shakeAmp = Math.max(this.camera.shakeAmp, 3)
+    }
   }
 
-  private tryBomb(sensorHandle: number, nowMs: number) {
+  private tryBomb(sensorHandle: number, trigger: MarbleRuntime, nowMs: number) {
     const bomb = this.bombByHandle.get(sensorHandle)
     if (!bomb) return
     if (nowMs - bomb.lastAtMs < bomb.cooldownMs) return
@@ -1020,9 +1074,13 @@ export class MarblesGame {
       m.body.applyImpulse({ x: nx * base, y: ny * base - base * 0.35 }, true)
     }
 
-    this.sfx?.playCut()
-    this.camera.shakeUntilMs = Math.max(this.camera.shakeUntilMs, nowMs + ms('260ms'))
-    this.camera.shakeAmp = Math.max(this.camera.shakeAmp, 10)
+    const focusId = this.camera.mode === 'focus' ? this.camera.focusId : null
+    const allowSfx = !focusId || trigger.participant.id === focusId
+    if (allowSfx && this.isInCameraView(bomb.x, bomb.y, 160)) {
+      this.sfx?.playCut()
+      this.camera.shakeUntilMs = Math.max(this.camera.shakeUntilMs, nowMs + ms('260ms'))
+      this.camera.shakeAmp = Math.max(this.camera.shakeAmp, 10)
+    }
   }
 
   private tryKicker(sensorHandle: number, m: MarbleRuntime, nowMs: number) {
@@ -1076,8 +1134,11 @@ export class MarblesGame {
       this.bumperFx.push({ x: kicker.x, y: kicker.y, r: fxR, atMs: nowMs, kind: fxKind })
       if (this.bumperFx.length > 40) this.bumperFx.splice(0, this.bumperFx.length - 40)
     }
+    const inView = this.isInCameraView(kicker.x, kicker.y, 60)
+    const focusId = this.camera.mode === 'focus' ? this.camera.focusId : null
+    const allowSfx = !focusId || m.participant.id === focusId
     // Global event SFX limiter (prevents early-game overlap noise)
-    if (this.sfx && kicker.playSfx) {
+    if (inView && allowSfx && this.sfx && kicker.playSfx) {
       const minGap = elapsedMs < ms('10s') ? ms('140ms') : ms('80ms')
       if (nowMs - this.lastEventSfxAtMs >= minGap) {
         this.lastEventSfxAtMs = nowMs
@@ -1087,12 +1148,7 @@ export class MarblesGame {
     }
 
     // Small camera shake if the bumper is on-screen (prevents off-screen noise).
-    const inView =
-      kicker.x >= this.camera.x - 60 &&
-      kicker.x <= this.camera.x + SCREEN_W + 60 &&
-      kicker.y >= this.camera.y - 60 &&
-      kicker.y <= this.camera.y + SCREEN_H + 60
-    if (inView && nowMs - this.lastBumperShakeAtMs >= ms('120ms')) {
+    if (inView && allowSfx && nowMs - this.lastBumperShakeAtMs >= ms('120ms')) {
       this.lastBumperShakeAtMs = nowMs
       const amp = fxKind === 'mega' ? 6 : 3
       this.camera.shakeUntilMs = Math.max(this.camera.shakeUntilMs, nowMs + ms('140ms'))
@@ -1107,11 +1163,19 @@ export class MarblesGame {
 
     const sorted = alive.slice().sort((a, b) => a.progressY - b.progressY)
     const victims = sorted.slice(0, cutCount)
-    for (const v of victims) this.eliminate(v, nowMs, 'cut')
+    const focusId = this.camera.mode === 'focus' ? this.camera.focusId : null
+    const restrictSfxToFocus = Boolean(focusId)
+    let includesFocus = false
+    for (const v of victims) {
+      if (focusId && v.participant.id === focusId) includesFocus = true
+      this.eliminate(v, nowMs, 'cut')
+    }
 
-    this.sfx?.playCut()
-    this.camera.shakeUntilMs = nowMs + ms('320ms')
-    this.camera.shakeAmp = 12
+    if (!restrictSfxToFocus || includesFocus) {
+      this.sfx?.playCut()
+      this.camera.shakeUntilMs = nowMs + ms('320ms')
+      this.camera.shakeAmp = 12
+    }
   }
 
   private maybeStartSlowMo(nowMs: number, top3: Array<MarbleRuntime | null>) {
@@ -1162,9 +1226,14 @@ export class MarblesGame {
     this.timeScale = 0.2
     this.slowMoUntilMs = nowMs + ms('3s')
     this.slowMoCooldownUntilMs = nowMs + ms('7s')
-    this.sfx?.playSlowMo()
-    this.camera.shakeUntilMs = nowMs + ms('180ms')
-    this.camera.shakeAmp = 4
+    const focusId = this.camera.mode === 'focus' ? this.camera.focusId : null
+    const restrictSfxToFocus = Boolean(focusId)
+    const focusInNear = focusId ? near.some((m) => m.participant.id === focusId) : false
+    if (!restrictSfxToFocus || focusInNear) {
+      this.sfx?.playSlowMo()
+      this.camera.shakeUntilMs = nowMs + ms('180ms')
+      this.camera.shakeAmp = 4
+    }
   }
 
   private onCupEntry(m: MarbleRuntime, nowMs: number) {
@@ -1187,9 +1256,13 @@ export class MarblesGame {
     if (!this.winner && this.cupEntries.length > 0) {
       const first = this.cupEntries[0]
       this.winner = { id: first.id, name: first.name, colorHex: first.colorHex }
-      this.sfx?.playWin()
-      this.camera.shakeUntilMs = Math.max(this.camera.shakeUntilMs, nowMs + ms('250ms'))
-      this.camera.shakeAmp = Math.max(this.camera.shakeAmp, 8)
+      const focusId = this.camera.mode === 'focus' ? this.camera.focusId : null
+      const restrictSfxToFocus = Boolean(focusId)
+      if (!restrictSfxToFocus || (focusId && first.id === focusId)) {
+        this.sfx?.playWin()
+        this.camera.shakeUntilMs = Math.max(this.camera.shakeUntilMs, nowMs + ms('250ms'))
+        this.camera.shakeAmp = Math.max(this.camera.shakeAmp, 8)
+      }
       this.emitUi(true)
     }
 

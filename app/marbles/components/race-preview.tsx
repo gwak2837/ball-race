@@ -273,14 +273,6 @@ export function RacePreview({ race }: RacePreviewProps) {
           </div>
         ) : null}
       </div>
-
-      <p className="text-sm leading-6 text-zinc-400">
-        {phase === 'setup'
-          ? '시작을 누르면 바로 1,000개 구슬이 떨어져요.'
-          : phase === 'running'
-            ? '지금은 컷/워프/가속/슬로모션까지 들어가 있어요. 다음은 사운드랑 더 강한 연출이에요.'
-            : 'Top3 시상식까지 보여줘요. 다음은 사운드/주스예요.'}
-      </p>
     </section>
   )
 }
