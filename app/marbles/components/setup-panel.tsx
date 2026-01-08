@@ -3,7 +3,7 @@ import { useState } from 'react'
 
 import ms from 'ms'
 
-import { trackGAEvent } from '@/src/analytics/ga'
+import { trackGAEvent } from '@/src/lib/analytics/ga'
 
 import type { MarblesEngineModel } from '../hooks/use-marbles-engine'
 import type { MarblesSetupModel } from '../hooks/use-marbles-setup'

@@ -11,7 +11,7 @@ import type { Participant } from '../participants'
 import { MarblesSfx } from '../sfx'
 import { VIEW_H, VIEW_W } from '../view'
 
-import { trackGAEvent } from '@/src/analytics/ga'
+import { trackGAEvent } from '@/src/lib/analytics/ga'
 
 export type MarblesClientPhase = 'setup' | 'running' | 'finished'
 

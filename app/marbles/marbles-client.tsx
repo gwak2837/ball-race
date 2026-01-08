@@ -2,7 +2,7 @@
 
 import ms from 'ms'
 
-import { trackGAEvent } from '@/src/analytics/ga'
+import { trackGAEvent } from '@/src/lib/analytics/ga'
 import { RacePreview } from './components/race-preview'
 import { SetupPanel } from './components/setup-panel'
 import { useMarblesEngine } from './hooks/use-marbles-engine'
