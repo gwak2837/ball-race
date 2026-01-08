@@ -1,5 +1,7 @@
 import type { MetadataRoute } from 'next'
 
+import { NEXT_PUBLIC_SITE_ORIGIN } from '@/src/constant/env'
+
 export default function robots(): MetadataRoute.Robots {
   const isProd = process.env.VERCEL_ENV
     ? process.env.VERCEL_ENV === 'production'
@@ -7,6 +9,6 @@ export default function robots(): MetadataRoute.Robots {
 
   return {
     rules: isProd ? [{ userAgent: '*', allow: '/' }] : [{ userAgent: '*', disallow: '/' }],
-    sitemap: 'https://raceball.vercel.app/sitemap.xml',
+    sitemap: `${NEXT_PUBLIC_SITE_ORIGIN}/sitemap.xml`,
   }
 }
