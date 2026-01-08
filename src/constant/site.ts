@@ -1,7 +1,6 @@
 export const SITE_NAME = '구슬 레이스'
-
+export const SITE_SHORT_NAME = 'raceball'
 export const SITE_DESCRIPTION = '최대 1,000명이 달리는 구슬 레이스예요. 참가자를 설정하고 바로 시작해 보세요.'
-
 export const SITE_TITLE_TEMPLATE = `%s | ${SITE_NAME}`
 
 export const SITE_KEYWORDS = [
