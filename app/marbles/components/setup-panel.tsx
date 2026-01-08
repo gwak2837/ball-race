@@ -1,15 +1,17 @@
-import type { ChangeEvent } from 'react';
-import { useState } from 'react';
+import type { ChangeEvent } from 'react'
+import { useState } from 'react'
 
-import ms from 'ms';
+import ms from 'ms'
 
-import type { MarblesEngineModel } from '../hooks/use-marbles-engine';
-import type { MarblesSetupModel } from '../hooks/use-marbles-setup';
+import { trackGAEvent } from '@/src/analytics/ga'
+
+import type { MarblesEngineModel } from '../hooks/use-marbles-engine'
+import type { MarblesSetupModel } from '../hooks/use-marbles-setup'
 
 export interface SetupPanelProps {
-  setup: MarblesSetupModel;
-  engine: Pick<MarblesEngineModel, 'canStart' | 'phase' | 'uiSnap' | 'reset' | 'focusByName' | 'setHighlightName'>;
-  onStart: () => void;
+  setup: MarblesSetupModel
+  engine: Pick<MarblesEngineModel, 'canStart' | 'phase' | 'uiSnap' | 'reset' | 'focusByName' | 'setHighlightName'>
+  onStart: () => void
 }
 
 export function SetupPanel({ setup, engine, onStart }: SetupPanelProps) {
@@ -29,49 +31,53 @@ export function SetupPanel({ setup, engine, onStart }: SetupPanelProps) {
     setSoundOn,
     setGravityY,
     setMinRoundSec,
-  } = setup;
+  } = setup
 
-  const { canStart, phase, uiSnap, reset, focusByName, setHighlightName: setEngineHighlightName } = engine;
-  const [focusFeedback, setFocusFeedback] = useState<string | null>(null);
+  const { canStart, phase, uiSnap, reset, focusByName, setHighlightName: setEngineHighlightName } = engine
+  const [focusFeedback, setFocusFeedback] = useState<string | null>(null)
 
   function onSelectAutoMode() {
-    setSetupMode('auto');
+    setSetupMode('auto')
+    trackGAEvent('ui_click', { target: 'setup_mode_auto' })
   }
 
   function onSelectPasteMode() {
-    setSetupMode('paste');
+    setSetupMode('paste')
+    trackGAEvent('ui_click', { target: 'setup_mode_paste' })
   }
 
   function onAutoCountChange(e: ChangeEvent<HTMLInputElement>) {
-    setAutoCount(Math.max(1, Math.min(1000, Number(e.target.value || 0))));
+    setAutoCount(Math.max(1, Math.min(1000, Number(e.target.value || 0))))
   }
 
   function onNamesTextChange(e: ChangeEvent<HTMLTextAreaElement>) {
-    setNamesText(e.target.value);
+    setNamesText(e.target.value)
   }
 
   function onHighlightNameChange(e: ChangeEvent<HTMLInputElement>) {
-    const next = e.target.value;
-    setSetupHighlightName(next);
-    setEngineHighlightName(next);
+    const next = e.target.value
+    setSetupHighlightName(next)
+    setEngineHighlightName(next)
   }
 
   function onClickFocus() {
-    const ok = focusByName(highlightName);
-    setFocusFeedback(ok ? '포커스했어요' : '찾을 수 없어요');
-    window.setTimeout(() => setFocusFeedback(null), ms('2s'));
+    const ok = focusByName(highlightName)
+    trackGAEvent('ui_click', { target: 'focus', ok: ok ? 1 : 0 })
+    setFocusFeedback(ok ? '포커스했어요' : '찾을 수 없어요')
+    window.setTimeout(() => setFocusFeedback(null), ms('2s'))
   }
 
   function onToggleSound() {
-    setSoundOn((v) => !v);
+    trackGAEvent('ui_click', { target: 'sound_toggle', next: soundOn ? 'off' : 'on' })
+    setSoundOn((v) => !v)
   }
 
   function onGravityChange(e: ChangeEvent<HTMLInputElement>) {
-    setGravityY(Number(e.target.value));
+    setGravityY(Number(e.target.value))
   }
 
   function onMinRoundSecChange(e: ChangeEvent<HTMLInputElement>) {
-    setMinRoundSec(Number(e.target.value));
+    setMinRoundSec(Number(e.target.value))
   }
 
   return (
@@ -291,8 +297,8 @@ export function SetupPanel({ setup, engine, onStart }: SetupPanelProps) {
                     uiSnap.winner?.id === r.id
                       ? 'text-emerald-300'
                       : r.didFinish
-                      ? 'text-emerald-200'
-                      : 'text-transparent',
+                        ? 'text-emerald-200'
+                        : 'text-transparent',
                   ].join(' ')}
                 >
                   {uiSnap.winner?.id === r.id ? '우승' : r.didFinish ? '완주' : '완주'}
@@ -331,5 +337,5 @@ export function SetupPanel({ setup, engine, onStart }: SetupPanelProps) {
         </ul>
       </div>
     </section>
-  );
+  )
 }

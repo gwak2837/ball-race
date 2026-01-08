@@ -1,25 +1,27 @@
-'use client';
+'use client'
 
-import ms from 'ms';
+import ms from 'ms'
 
-import { RacePreview } from './components/race-preview';
-import { SetupPanel } from './components/setup-panel';
-import { useMarblesEngine } from './hooks/use-marbles-engine';
-import { useMarblesSetupModel } from './hooks/use-marbles-setup';
-import { buildParticipants } from './participants';
+import { trackGAEvent } from '@/src/analytics/ga'
+import { RacePreview } from './components/race-preview'
+import { SetupPanel } from './components/setup-panel'
+import { useMarblesEngine } from './hooks/use-marbles-engine'
+import { useMarblesSetupModel } from './hooks/use-marbles-setup'
+import { buildParticipants } from './participants'
 
-const CHECKPOINT_CUT_DELAY_MS = ms('3s');
-const UI_HINT = `체크포인트 컷은 선두가 도착하면 ${Math.round(CHECKPOINT_CUT_DELAY_MS / 1000)}초 후에 발동돼요.`;
+const CHECKPOINT_CUT_DELAY_MS = ms('3s')
+const UI_HINT = `체크포인트 컷은 선두가 도착하면 ${Math.round(CHECKPOINT_CUT_DELAY_MS / 1000)}초 후에 발동돼요.`
 
 export function MarblesClient() {
-  const setup = useMarblesSetupModel();
-  const engine = useMarblesEngine();
-  const { getNames, gravityY, highlightName, minRoundSec, soundOn } = setup;
-  const { phase, start } = engine;
+  const setup = useMarblesSetupModel()
+  const engine = useMarblesEngine()
+  const { getNames, gravityY, highlightName, minRoundSec, soundOn } = setup
+  const { phase, start } = engine
 
   function onStart() {
-    const names = getNames();
-    const participants = buildParticipants(names).slice(0, 1000);
+    trackGAEvent('ui_click', { target: 'start' })
+    const names = getNames()
+    const participants = buildParticipants(names).slice(0, 1000)
 
     start({
       participants,
@@ -27,7 +29,7 @@ export function MarblesClient() {
       soundOn,
       gravityY,
       minRoundSec,
-    });
+    })
   }
 
   return (
@@ -44,5 +46,5 @@ export function MarblesClient() {
         </div>
       </div>
     </div>
-  );
+  )
 }
