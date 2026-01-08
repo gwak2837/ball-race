@@ -1,119 +1,119 @@
-import type { MouseEvent, PointerEvent, RefObject } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import type { MouseEvent, PointerEvent, RefObject } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
-import ms from 'ms';
+import ms from 'ms'
 
-import type { MarblesClientPhase } from '../hooks/use-marbles-engine';
-import type { MarblesUiSnapshot } from '../marbles-game';
-import { VIEW_H, VIEW_W } from '../view';
+import type { MarblesClientPhase } from '../hooks/use-marbles-engine'
+import type { MarblesUiSnapshot } from '../marbles-game'
+import { VIEW_H, VIEW_W } from '../view'
 
 function clamp(n: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, n));
+  return Math.max(min, Math.min(max, n))
 }
 
 export interface RacePreviewModel {
-  phase: MarblesClientPhase;
-  uiSnap: MarblesUiSnapshot | null;
-  canvasWrapRef: RefObject<HTMLDivElement | null>;
-  panCameraBy: (dx: number, dy: number) => void;
-  jumpCameraTo: (x: number, y: number, durationMs: number) => void;
+  phase: MarblesClientPhase
+  uiSnap: MarblesUiSnapshot | null
+  canvasWrapRef: RefObject<HTMLDivElement | null>
+  panCameraBy: (dx: number, dy: number) => void
+  jumpCameraTo: (x: number, y: number, durationMs: number) => void
 }
 
 interface DragState {
-  active: boolean;
-  pointerId: number;
-  lastX: number;
-  lastY: number;
+  active: boolean
+  pointerId: number
+  lastX: number
+  lastY: number
 }
 
 export interface RacePreviewProps {
-  race: RacePreviewModel;
+  race: RacePreviewModel
 }
 
 export function RacePreview({ race }: RacePreviewProps) {
-  const { phase, uiSnap, canvasWrapRef, panCameraBy, jumpCameraTo } = race;
-  const videoShellRef = useRef<HTMLDivElement | null>(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const dragRef = useRef<DragState | undefined>(undefined);
-  const world = uiSnap?.world;
-  const cam = uiSnap?.camera;
+  const { phase, uiSnap, canvasWrapRef, panCameraBy, jumpCameraTo } = race
+  const videoShellRef = useRef<HTMLDivElement | null>(null)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  const dragRef = useRef<DragState | undefined>(undefined)
+  const world = uiSnap?.world
+  const cam = uiSnap?.camera
 
   function stopPropagation(e: { stopPropagation: () => void }) {
-    e.stopPropagation();
+    e.stopPropagation()
   }
 
   function onDragPointerDown(e: PointerEvent<HTMLDivElement>) {
     if (phase !== 'running') {
-      return;
+      return
     }
     dragRef.current = {
       active: true,
       pointerId: e.pointerId,
       lastX: e.clientX,
       lastY: e.clientY,
-    };
-    e.currentTarget.setPointerCapture(e.pointerId);
+    }
+    e.currentTarget.setPointerCapture(e.pointerId)
   }
 
   function onDragPointerMove(e: PointerEvent<HTMLDivElement>) {
-    const d = dragRef.current;
-    if (!d?.active || d.pointerId !== e.pointerId) return;
-    const dx = e.clientX - d.lastX;
-    const dy = e.clientY - d.lastY;
-    d.lastX = e.clientX;
-    d.lastY = e.clientY;
+    const d = dragRef.current
+    if (!d?.active || d.pointerId !== e.pointerId) return
+    const dx = e.clientX - d.lastX
+    const dy = e.clientY - d.lastY
+    d.lastX = e.clientX
+    d.lastY = e.clientY
     // Dragging the view: move camera opposite the pointer delta.
-    panCameraBy(-dx, -dy);
+    panCameraBy(-dx, -dy)
   }
 
   function onDragPointerUp(e: PointerEvent<HTMLDivElement>) {
-    const d = dragRef.current;
+    const d = dragRef.current
     if (!d || d.pointerId !== e.pointerId) {
-      return;
+      return
     }
-    dragRef.current = undefined;
-    e.currentTarget.releasePointerCapture(e.pointerId);
+    dragRef.current = undefined
+    e.currentTarget.releasePointerCapture(e.pointerId)
   }
 
   function onDragPointerCancel() {
-    dragRef.current = undefined;
+    dragRef.current = undefined
   }
 
   async function onToggleFullscreen() {
-    const el = videoShellRef.current;
+    const el = videoShellRef.current
     if (!el) {
-      return;
+      return
     }
     if (document.fullscreenElement) {
-      await document.exitFullscreen();
-      return;
+      await document.exitFullscreen()
+      return
     }
-    await el.requestFullscreen();
+    await el.requestFullscreen()
   }
 
   function onMinimapClick(e: MouseEvent<HTMLButtonElement>) {
-    if (!world) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const nx = clamp((e.clientX - rect.left) / rect.width, 0, 1);
-    const ny = clamp((e.clientY - rect.top) / rect.height, 0, 1);
-    const worldX = nx * world.w;
-    const worldY = ny * world.h;
-    const targetX = worldX - world.screenW / 2;
-    const targetY = worldY - world.screenH / 2;
-    jumpCameraTo(targetX, targetY, ms('4s'));
+    if (!world) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const nx = clamp((e.clientX - rect.left) / rect.width, 0, 1)
+    const ny = clamp((e.clientY - rect.top) / rect.height, 0, 1)
+    const worldX = nx * world.w
+    const worldY = ny * world.h
+    const targetX = worldX - world.screenW / 2
+    const targetY = worldY - world.screenH / 2
+    jumpCameraTo(targetX, targetY, ms('4s'))
   }
 
   // NOTE: 브라우저 fullscreen 상태(외부 시스템)를 React UI 상태와 동기화해요
   useEffect(() => {
     function onFsChange() {
-      setIsFullscreen(Boolean(document.fullscreenElement));
+      setIsFullscreen(Boolean(document.fullscreenElement))
     }
 
-    onFsChange();
+    onFsChange()
 
-    document.addEventListener('fullscreenchange', onFsChange);
-    return () => document.removeEventListener('fullscreenchange', onFsChange);
-  }, []);
+    document.addEventListener('fullscreenchange', onFsChange)
+    return () => document.removeEventListener('fullscreenchange', onFsChange)
+  }, [])
 
   return (
     <section className="flex flex-col gap-3">
@@ -278,9 +278,9 @@ export function RacePreview({ race }: RacePreviewProps) {
         {phase === 'setup'
           ? '시작을 누르면 바로 1,000개 구슬이 떨어져요.'
           : phase === 'running'
-          ? '지금은 컷/워프/가속/슬로모션까지 들어가 있어요. 다음은 사운드랑 더 강한 연출이에요.'
-          : 'Top3 시상식까지 보여줘요. 다음은 사운드/주스예요.'}
+            ? '지금은 컷/워프/가속/슬로모션까지 들어가 있어요. 다음은 사운드랑 더 강한 연출이에요.'
+            : 'Top3 시상식까지 보여줘요. 다음은 사운드/주스예요.'}
       </p>
     </section>
-  );
+  )
 }

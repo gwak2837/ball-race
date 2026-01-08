@@ -1,39 +1,39 @@
-import ms from 'ms';
+import ms from 'ms'
 
 export class MarblesSfx {
-  private ctx: AudioContext | null = null;
-  private master: GainNode | null = null;
-  private combo = 0;
+  private ctx: AudioContext | null = null
+  private master: GainNode | null = null
+  private combo = 0
 
   enable() {
-    if (this.ctx) return;
-    type WebkitWindow = Window & { webkitAudioContext?: typeof AudioContext };
-    const AudioContextCtor = window.AudioContext || (window as WebkitWindow).webkitAudioContext;
-    if (!AudioContextCtor) return;
-    const ctx = new AudioContextCtor();
-    const master = ctx.createGain();
-    master.gain.value = 0.65;
-    master.connect(ctx.destination);
-    this.ctx = ctx;
-    this.master = master;
-    void ctx.resume();
+    if (this.ctx) return
+    type WebkitWindow = Window & { webkitAudioContext?: typeof AudioContext }
+    const AudioContextCtor = window.AudioContext || (window as WebkitWindow).webkitAudioContext
+    if (!AudioContextCtor) return
+    const ctx = new AudioContextCtor()
+    const master = ctx.createGain()
+    master.gain.value = 0.65
+    master.connect(ctx.destination)
+    this.ctx = ctx
+    this.master = master
+    void ctx.resume()
   }
 
   dispose() {
-    const ctx = this.ctx;
-    this.ctx = null;
-    this.master = null;
-    if (ctx) void ctx.close();
+    const ctx = this.ctx
+    this.ctx = null
+    this.master = null
+    if (ctx) void ctx.close()
   }
 
   private now() {
-    const ctx = this.ctx;
-    if (!ctx) return null;
-    return ctx.currentTime;
+    const ctx = this.ctx
+    if (!ctx) return null
+    return ctx.currentTime
   }
 
   private out() {
-    return this.master;
+    return this.master
   }
 
   private playTone({
@@ -48,58 +48,58 @@ export class MarblesSfx {
     detuneCents,
     filter,
   }: {
-    type: OscillatorType;
-    freqHz: number;
-    gain: number;
-    attackMs: number;
-    decayMs: number;
-    sustain: number;
-    releaseMs: number;
-    durationMs: number;
-    detuneCents?: number;
-    filter?: { type: BiquadFilterType; freqHz: number; q: number } | undefined;
+    type: OscillatorType
+    freqHz: number
+    gain: number
+    attackMs: number
+    decayMs: number
+    sustain: number
+    releaseMs: number
+    durationMs: number
+    detuneCents?: number
+    filter?: { type: BiquadFilterType; freqHz: number; q: number } | undefined
   }) {
-    const ctx = this.ctx;
-    const master = this.master;
-    const t0 = this.now();
-    if (!ctx || !master || t0 === null) return;
+    const ctx = this.ctx
+    const master = this.master
+    const t0 = this.now()
+    if (!ctx || !master || t0 === null) return
 
-    const osc = ctx.createOscillator();
-    osc.type = type;
-    osc.frequency.value = freqHz;
-    if (detuneCents) osc.detune.value = detuneCents;
+    const osc = ctx.createOscillator()
+    osc.type = type
+    osc.frequency.value = freqHz
+    if (detuneCents) osc.detune.value = detuneCents
 
-    const g = ctx.createGain();
-    g.gain.setValueAtTime(0.0001, t0);
-    g.gain.exponentialRampToValueAtTime(Math.max(0.0001, gain), t0 + attackMs / 1000);
-    g.gain.exponentialRampToValueAtTime(Math.max(0.0001, gain * sustain), t0 + (attackMs + decayMs) / 1000);
+    const g = ctx.createGain()
+    g.gain.setValueAtTime(0.0001, t0)
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0001, gain), t0 + attackMs / 1000)
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0001, gain * sustain), t0 + (attackMs + decayMs) / 1000)
 
-    const tEnd = t0 + durationMs / 1000;
-    g.gain.exponentialRampToValueAtTime(0.0001, tEnd + releaseMs / 1000);
+    const tEnd = t0 + durationMs / 1000
+    g.gain.exponentialRampToValueAtTime(0.0001, tEnd + releaseMs / 1000)
 
-    let node: AudioNode = osc;
+    let node: AudioNode = osc
     if (filter) {
-      const f = ctx.createBiquadFilter();
-      f.type = filter.type;
-      f.frequency.value = filter.freqHz;
-      f.Q.value = filter.q;
-      node.connect(f);
-      node = f;
+      const f = ctx.createBiquadFilter()
+      f.type = filter.type
+      f.frequency.value = filter.freqHz
+      f.Q.value = filter.q
+      node.connect(f)
+      node = f
     }
 
-    node.connect(g);
-    g.connect(master);
+    node.connect(g)
+    g.connect(master)
 
-    osc.start(t0);
-    osc.stop(tEnd + releaseMs / 1000);
+    osc.start(t0)
+    osc.stop(tEnd + releaseMs / 1000)
   }
 
   playClick(intensity01: number) {
-    const i = Math.max(0, Math.min(1, intensity01));
+    const i = Math.max(0, Math.min(1, intensity01))
     // Combo rises with intensity, then decays.
-    this.combo = Math.max(0, Math.min(18, this.combo * 0.92 + i * 2.6));
-    const base = 520 + this.combo * 42;
-    const jitter = (Math.random() * 2 - 1) * 24;
+    this.combo = Math.max(0, Math.min(18, this.combo * 0.92 + i * 2.6))
+    const base = 520 + this.combo * 42
+    const jitter = (Math.random() * 2 - 1) * 24
     this.playTone({
       type: 'triangle',
       freqHz: base + jitter,
@@ -110,15 +110,15 @@ export class MarblesSfx {
       releaseMs: ms('30ms'),
       durationMs: ms('28ms'),
       filter: { type: 'highpass', freqHz: 700, q: 0.7 },
-    });
+    })
   }
 
   playBumper(intensity01: number, kind: 'normal' | 'mega' = 'normal') {
-    const i = Math.max(0, Math.min(1, intensity01));
-    const w = kind === 'mega' ? 1.25 : 1;
+    const i = Math.max(0, Math.min(1, intensity01))
+    const w = kind === 'mega' ? 1.25 : 1
 
     // Bumper combo rises faster than regular clicks (more "pinball pop" feel).
-    this.combo = Math.max(0, Math.min(22, this.combo * 0.9 + i * 4.1 * w));
+    this.combo = Math.max(0, Math.min(22, this.combo * 0.9 + i * 4.1 * w))
 
     // Low "thump"
     this.playTone({
@@ -131,11 +131,11 @@ export class MarblesSfx {
       releaseMs: ms('120ms'),
       durationMs: ms('90ms'),
       filter: { type: 'lowpass', freqHz: 220, q: 0.85 },
-    });
+    })
 
     // Bright "pop"
-    const base = 720 + this.combo * 46;
-    const jitter = (Math.random() * 2 - 1) * 34;
+    const base = 720 + this.combo * 46
+    const jitter = (Math.random() * 2 - 1) * 34
     this.playTone({
       type: 'triangle',
       freqHz: base + jitter,
@@ -146,7 +146,7 @@ export class MarblesSfx {
       releaseMs: ms('40ms'),
       durationMs: ms('36ms'),
       filter: { type: 'highpass', freqHz: 650, q: 0.8 },
-    });
+    })
   }
 
   playWarp() {
@@ -160,7 +160,7 @@ export class MarblesSfx {
       releaseMs: ms('120ms'),
       durationMs: ms('160ms'),
       filter: { type: 'bandpass', freqHz: 900, q: 1.1 },
-    });
+    })
   }
 
   playBoost(kind: 'catchup' | 'debuff' | 'mid') {
@@ -175,8 +175,8 @@ export class MarblesSfx {
         releaseMs: ms('90ms'),
         durationMs: ms('90ms'),
         filter: { type: 'lowpass', freqHz: 260, q: 0.9 },
-      });
-      return;
+      })
+      return
     }
     this.playTone({
       type: 'sine',
@@ -188,7 +188,7 @@ export class MarblesSfx {
       releaseMs: ms('100ms'),
       durationMs: ms('120ms'),
       filter: { type: 'highpass', freqHz: 180, q: 0.7 },
-    });
+    })
   }
 
   playCut() {
@@ -202,7 +202,7 @@ export class MarblesSfx {
       releaseMs: ms('180ms'),
       durationMs: ms('160ms'),
       filter: { type: 'lowpass', freqHz: 220, q: 0.8 },
-    });
+    })
   }
 
   playSlowMo() {
@@ -216,7 +216,7 @@ export class MarblesSfx {
       releaseMs: ms('220ms'),
       durationMs: ms('220ms'),
       filter: { type: 'lowpass', freqHz: 520, q: 0.7 },
-    });
+    })
   }
 
   playWin() {
@@ -230,7 +230,7 @@ export class MarblesSfx {
       releaseMs: ms('200ms'),
       durationMs: ms('200ms'),
       filter: { type: 'highpass', freqHz: 220, q: 0.6 },
-    });
+    })
     // Second tone (a bright fifth)
     this.playTone({
       type: 'triangle',
@@ -242,6 +242,6 @@ export class MarblesSfx {
       releaseMs: ms('240ms'),
       durationMs: ms('240ms'),
       filter: { type: 'highpass', freqHz: 260, q: 0.6 },
-    });
+    })
   }
 }
