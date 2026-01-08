@@ -1,12 +1,5 @@
-import type { Metadata } from 'next';
-
-import { MarblesClient } from './marbles-client';
-
-export const metadata: Metadata = {
-  title: '구슬 레이스',
-  description: '구슬 레이스예요.',
-};
+import { permanentRedirect } from 'next/navigation'
 
 export default function MarblesPage() {
-  return <MarblesClient />;
+  permanentRedirect('/')
 }

@@ -1,5 +1,5 @@
-import { redirect } from 'next/navigation';
+import { MarblesClient } from './marbles/marbles-client'
 
 export default function Home() {
-  redirect('/marbles');
+  return <MarblesClient />
 }
