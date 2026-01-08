@@ -192,11 +192,9 @@ export function RacePreview({ race }: RacePreviewProps) {
           <div className="pointer-events-none absolute left-1/2 top-4 w-[min(520px,calc(100%-32px))] -translate-x-1/2 rounded-2xl border border-white/10 bg-black/60 px-4 py-3 backdrop-blur">
             <div className="flex items-end justify-between gap-4">
               <div className="flex flex-col">
-                <div className="text-sm font-medium text-zinc-200">
-                  체크포인트 {uiSnap.cut.checkpointNumber} 컷이에요
-                </div>
+                <div className="text-sm font-medium text-zinc-200">체크포인트 {uiSnap.cut.checkpointNumber}</div>
                 <div className="text-xs text-zinc-400">
-                  하위 {uiSnap.cut.cutCount.toLocaleString()}명이 컷될 거예요.
+                  하위 {uiSnap.cut.cutCount.toLocaleString()}명이 탈락할 거예요.
                 </div>
               </div>
               <div className="text-3xl font-semibold tabular-nums tracking-tight text-white">
@@ -240,9 +238,9 @@ export function RacePreview({ race }: RacePreviewProps) {
           </div>
         ) : null}
 
-        {phase === 'finished' && uiSnap?.winner && uiSnap.postFinish && uiSnap.postFinish.remainingMs > 0 ? (
-          <div className="pointer-events-none absolute inset-x-0 bottom-4 flex items-center justify-center">
-            <div className="rounded-2xl border border-white/10 bg-black/60 px-4 py-2 text-sm text-zinc-200 backdrop-blur">
+        {uiSnap?.winner && uiSnap.postFinish && uiSnap.postFinish.remainingMs > 0 ? (
+          <div className="pointer-events-none absolute inset-x-0 top-14 flex items-center justify-center">
+            <div className="rounded-2xl border border-white/10 bg-black/40 px-4 py-2 text-sm text-zinc-200 backdrop-blur-sm">
               <span className="font-medium" style={{ color: uiSnap.winner.colorHex }}>
                 {uiSnap.winner.name}
               </span>
@@ -273,6 +271,76 @@ export function RacePreview({ race }: RacePreviewProps) {
           </div>
         ) : null}
       </div>
+
+      <details className="group rounded-2xl border border-white/10 bg-zinc-900/30 p-4">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+          <div className="flex flex-col gap-0.5">
+            <div className="text-sm font-medium text-zinc-200">장애물 안내</div>
+            <div className="text-xs text-zinc-500">전략 포인트만 간단히 모아뒀어요.</div>
+          </div>
+          <div className="shrink-0 text-xs text-zinc-400 group-open:hidden">열기</div>
+          <div className="shrink-0 hidden text-xs text-zinc-400 group-open:block">닫기</div>
+        </summary>
+
+        <div className="mt-3 grid gap-2">
+          <details className="group rounded-xl border border-white/10 bg-zinc-950/40 px-3 py-2">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+              <div className="flex items-center gap-2 text-sm text-zinc-200">
+                <span className="h-2.5 w-2.5 rounded-full bg-cyan-300/80" />
+                제트 게이트(가로 긴 바)
+              </div>
+              <div className="text-[10px] text-zinc-500 group-open:hidden">설명</div>
+              <div className="hidden text-[10px] text-zinc-500 group-open:block">접기</div>
+            </summary>
+            <div className="mt-2 text-xs leading-5 text-zinc-400">
+              시간 게이트예요. 첫 번째는 한 번 튕기고 통과하고, 두/세 번째는{' '}
+              <span className="text-zinc-200">가끔(5%)</span> 바로 통과해요.
+            </div>
+          </details>
+
+          <details className="group rounded-xl border border-white/10 bg-zinc-950/40 px-3 py-2">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+              <div className="flex items-center gap-2 text-sm text-zinc-200">
+                <span className="h-2.5 w-2.5 rounded-full bg-violet-400/80" />
+                마그넷(보라 원)
+              </div>
+              <div className="text-[10px] text-zinc-500 group-open:hidden">설명</div>
+              <div className="hidden text-[10px] text-zinc-500 group-open:block">접기</div>
+            </summary>
+            <div className="mt-2 text-xs leading-5 text-zinc-400">
+              선두(Top10)만 잠깐 끌어당겨서 멈칫하게 만들어요. 추격자 입장에서는 간격을 줄이기 좋은 구간이에요.
+            </div>
+          </details>
+
+          <details className="group rounded-xl border border-white/10 bg-zinc-950/40 px-3 py-2">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+              <div className="flex items-center gap-2 text-sm text-zinc-200">
+                <span className="h-2.5 w-2.5 rounded-full bg-red-400/80" />
+                폭탄(빨강 원)
+              </div>
+              <div className="text-[10px] text-zinc-500 group-open:hidden">설명</div>
+              <div className="hidden text-[10px] text-zinc-500 group-open:block">접기</div>
+            </summary>
+            <div className="mt-2 text-xs leading-5 text-zinc-400">
+              가끔 폭발해서 주변을 튕겨내요. 뭉쳐 있을 때 들어가면 순위가 크게 뒤집힐 수도 있어요.
+            </div>
+          </details>
+
+          <details className="group rounded-xl border border-white/10 bg-zinc-950/40 px-3 py-2">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+              <div className="flex items-center gap-2 text-sm text-zinc-200">
+                <span className="h-2.5 w-3.5 rounded-sm bg-violet-400/70" />
+                워프 존(보라 바)
+              </div>
+              <div className="text-[10px] text-zinc-500 group-open:hidden">설명</div>
+              <div className="hidden text-[10px] text-zinc-500 group-open:block">접기</div>
+            </summary>
+            <div className="mt-2 text-xs leading-5 text-zinc-400">
+              하위 30%만 발동돼요. 한 번만 써서 앞으로 보내 주는 역전 장치예요.
+            </div>
+          </details>
+        </div>
+      </details>
     </section>
   )
 }

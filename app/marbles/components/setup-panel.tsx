@@ -245,7 +245,7 @@ export function SetupPanel({ setup, engine, onStart }: SetupPanelProps) {
             {uiSnap.slowMo && uiSnap.slowMo.remainingMs > 0 ? (
               <div className="rounded-xl border border-amber-200/10 bg-amber-400/10 p-3 text-sm">
                 <div className="flex items-center justify-between">
-                  <div className="font-semibold text-amber-200">골든 모먼트예요</div>
+                  <div className="font-semibold text-amber-200">골든 모먼트</div>
                   <div className="text-xs tabular-nums text-amber-100/80">
                     {Math.max(0, Math.ceil(uiSnap.slowMo.remainingMs / ms('1s')))}초
                   </div>
@@ -255,13 +255,13 @@ export function SetupPanel({ setup, engine, onStart }: SetupPanelProps) {
             ) : uiSnap.cut ? (
               <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-sm">
                 <div className="flex items-center justify-between gap-3">
-                  <div className="font-medium text-zinc-200">체크포인트 {uiSnap.cut.checkpointNumber} 컷이에요</div>
+                  <div className="font-medium text-zinc-200">체크포인트 {uiSnap.cut.checkpointNumber}</div>
                   <div className="text-xs tabular-nums text-zinc-300">
                     {Math.max(0, Math.ceil(uiSnap.cut.remainingMs / ms('1s')))}초
                   </div>
                 </div>
                 <div className="mt-1 text-xs text-zinc-400">
-                  하위 {uiSnap.cut.cutCount.toLocaleString()}명이 컷될 거예요.
+                  하위 {uiSnap.cut.cutCount.toLocaleString()}명이 탈락할 거예요.
                 </div>
               </div>
             ) : uiSnap.fastForward && uiSnap.fastForward.scale > 1 ? (

@@ -148,7 +148,8 @@ const CUP_Y = WORLD_H - 120
 const DEFAULT_GRAVITY_Y = 1000
 const DEFAULT_MIN_ROUND_MS = ms('60s')
 
-const POST_FINISH_MS = ms('3s')
+const POST_FINISH_MS = ms('10s')
+const POST_FINISH_RUN_MS = ms('10s')
 
 const TOP10_FINISHERS_TARGET = 10
 const FAST_FORWARD_SCALE = 2
@@ -160,6 +161,8 @@ const UI_EMIT_EVERY_MS = ms('100ms')
 const FIXED_STEP_MS = ms('16.666ms')
 const OUT_OF_BOUNDS_Y = WORLD_H + 400
 const OUT_OF_BOUNDS_X_PAD = 160
+
+const JET_JACKPOT_PASS_CHANCE = 0.05
 
 function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n))
@@ -270,7 +273,7 @@ export class MarblesGame {
   private slowMoCooldownUntilMs = 0
   private fastForwardOn = false
 
-  private finishState: { winnerId: string; endsAtMs: number } | null = null
+  private finishState: { winnerId: string; postEndsAtMs: number; stopAtMs: number } | null = null
   private winner: { id: string; name: string; colorHex: string } | null = null
   private eliminatedBy = { fall: 0, cut: 0 }
   private minRoundEndsAtMs = 0
@@ -528,20 +531,6 @@ export class MarblesGame {
     if (!this.world || !this.eventQueue || !this.worldContainer) return
 
     const now = performance.now()
-
-    if (this.phase === 'finished') {
-      // Keep emitting UI briefly so post-finish notices can naturally expire,
-      // then stop the ticker to save CPU.
-      this.emitUi(false)
-
-      if (this.finishState && now >= this.finishState.endsAtMs) {
-        this.finishState = null
-        this.emitUi(true)
-        this.app.ticker.remove(this.onTick)
-      }
-      return
-    }
-
     if (this.phase !== 'running') return
 
     const frameMs = clamp(now - this.lastTickMs, 0, ms('50ms'))
@@ -564,10 +553,18 @@ export class MarblesGame {
     this.maybePlayCollisionClicks(now)
     this.emitUi(false)
 
-    // End condition: run at least 60s, then stop as soon as we have at least one finisher.
-    // (If nobody finished by 60s, keep running until the first cup entry.)
+    if (this.finishState) {
+      if (now >= this.finishState.stopAtMs) {
+        this.endRound(now)
+      }
+      return
+    }
+
+    // Finish trigger: run at least minRoundMs, then start a 10s "post-finish run"
+    // as soon as we have at least one finisher.
+    // (If nobody finished by minRoundMs, keep running until the first cup entry.)
     if (now >= this.minRoundEndsAtMs && this.cupEntries.length > 0) {
-      this.endRound(now)
+      this.beginFinishSequence(now)
     }
   }
 
@@ -685,7 +682,7 @@ export class MarblesGame {
 
       // Jet bands (anti-speedrun) — per-marble gating.
       // Band #1: always bounces once, then you pass.
-      // Band #2/#3: 10% "jackpot pass" (no bounce). Otherwise you get denied (bounce) and must retry.
+      // Band #2/#3: 5% "jackpot pass" (no bounce). Otherwise you get denied (bounce) and must retry.
       if (this.phase === 'running' && this.jetBands.length > 0 && y > prevY && nowMs >= m.jetCooldownUntilMs) {
         for (let i = 0; i < this.jetBands.length; i += 1) {
           const band = this.jetBands[i]
@@ -694,7 +691,7 @@ export class MarblesGame {
           if ((m.jetMask & mask) !== 0) continue
           if (prevY < band.y && y >= band.y) {
             const isFirstBand = i === 0
-            const jackpotPass = !isFirstBand && Math.random() < 0.1
+            const jackpotPass = !isFirstBand && Math.random() < JET_JACKPOT_PASS_CHANCE
             if (jackpotPass) {
               m.jetMask |= mask
               // Pass through with a little sideways randomness (prevents a single "clean lane").
@@ -1292,8 +1289,34 @@ export class MarblesGame {
 
     // If minimum time already passed, end immediately on the first cup entry.
     if (this.phase === 'running' && nowMs >= this.minRoundEndsAtMs && this.cupEntries.length > 0) {
-      this.endRound(nowMs)
+      this.beginFinishSequence(nowMs)
     }
+  }
+
+  private beginFinishSequence(nowMs: number) {
+    if (this.phase !== 'running') return
+    if (this.finishState) return
+    if (this.cupEntries.length === 0) return
+
+    const first = this.cupEntries[0]
+    this.winner = { id: first.id, name: first.name, colorHex: first.colorHex }
+    this.finishState = {
+      winnerId: first.id,
+      postEndsAtMs: nowMs + POST_FINISH_MS,
+      stopAtMs: nowMs + POST_FINISH_RUN_MS,
+    }
+
+    // Don't override user-driven camera peeks (minimap) when starting the finish sequence.
+    if (this.camera.mode === 'auto' && this.worldContainer) {
+      this.camera.mode = 'manual'
+      this.camera.manualUntilMs = nowMs + POST_FINISH_RUN_MS
+      this.camera.x = 0
+      this.camera.y = clamp(CUP_Y - SCREEN_H * 0.72, 0, WORLD_H - SCREEN_H)
+      this.worldContainer.x = -this.camera.x
+      this.worldContainer.y = -this.camera.y
+    }
+
+    this.emitUi(true)
   }
 
   private endRound(nowMs: number) {
@@ -1303,19 +1326,11 @@ export class MarblesGame {
     const first = this.cupEntries[0]
     this.winner = { id: first.id, name: first.name, colorHex: first.colorHex }
     this.phase = 'finished'
-    this.finishState = { winnerId: first.id, endsAtMs: nowMs + POST_FINISH_MS }
-    // Don't override user-driven camera peeks (minimap) when ending.
-    if (this.camera.mode === 'auto' && this.worldContainer) {
-      this.camera.mode = 'manual'
-      this.camera.manualUntilMs = nowMs + ms('6s')
-      this.camera.x = 0
-      this.camera.y = clamp(CUP_Y - SCREEN_H * 0.72, 0, WORLD_H - SCREEN_H)
-      this.worldContainer.x = -this.camera.x
-      this.worldContainer.y = -this.camera.y
-    }
+    this.finishState = null
     // Ensure visuals (e.g. cup-sink hideImmediately) apply immediately even if the round ended mid-step.
     this.render(nowMs)
     this.emitUi(true)
+    this.app.ticker.remove(this.onTick)
   }
 
   private recordCupEntry(m: MarbleRuntime, nowMs: number) {
@@ -1576,8 +1591,8 @@ export class MarblesGame {
         : undefined
 
     const postFinish =
-      this.finishState && now < this.finishState.endsAtMs
-        ? { remainingMs: Math.max(0, this.finishState.endsAtMs - now) }
+      this.finishState && now < this.finishState.postEndsAtMs
+        ? { remainingMs: Math.max(0, this.finishState.postEndsAtMs - now) }
         : undefined
 
     this.onUi({
@@ -2040,7 +2055,8 @@ export class MarblesGame {
     worldContainer.addChild(slowG)
 
     // Magnet pit (leaders only): pulls top10 into a stall zone for a moment.
-    const magnet = { x: 640, y: 5200, r: 120 } as const
+    // Place it away from jet bands so the effect reads clearly.
+    const magnet = { x: 820, y: 5600, r: 120 } as const
     const magnetCd = this.R.ColliderDesc.ball(magnet.r)
       .setTranslation(magnet.x, magnet.y)
       .setSensor(true)
@@ -2064,7 +2080,8 @@ export class MarblesGame {
     worldContainer.addChild(magnetG)
 
     // Bomb zone: occasional chaos burst (pinball-style).
-    const bomb = { x: 640, y: 8120, r: 140 } as const
+    // Place it away from jet bands so it doesn't visually stack with the long horizontal gate.
+    const bomb = { x: 1040, y: 7720, r: 140 } as const
     const bombCd = this.R.ColliderDesc.ball(bomb.r)
       .setTranslation(bomb.x, bomb.y)
       .setSensor(true)
