@@ -1199,8 +1199,7 @@ export class MarblesGame {
     if (nowMs - pit.lastAtMs < pit.cooldownMs) return
     pit.lastAtMs = nowMs
 
-    // Debuff leaders: only top10 gets "held" by the magnet.
-    if (!this.isTop10(m)) return
+    if (!this.isTop30(m)) return
 
     const p0 = m.body.translation()
     const inView = this.isInCameraView(p0.x, p0.y, 140)

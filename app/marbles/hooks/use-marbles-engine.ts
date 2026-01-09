@@ -40,7 +40,7 @@ function drawIdleScene({ PIXI, app }: IdleSceneInput) {
     .stroke({ color: 0x2a2a2a, width: 2 })
 
   const title = new PIXI.Text({
-    text: '구슬 레이스예요',
+    text: '구슬 레이스',
     style: {
       fontFamily: 'var(--font-geist-sans)',
       fontSize: 32,

@@ -364,7 +364,7 @@ export function RacePreview({ race, soundOn, onToggleSound }: RacePreviewProps) 
               <div className="hidden text-[10px] text-zinc-500 group-open:block">접기</div>
             </summary>
             <div className="mt-2 text-xs leading-5 text-zinc-400">
-              선두(Top10)만 잠깐 끌어당겨서 멈칫하게 만들어요. 추격자 입장에서는 간격을 줄이기 좋은 구간이에요.
+              상위 30%만 잠깐 끌어당겨서 멈칫하게 만들어요. 추격자 입장에서는 간격을 줄이기 좋은 구간이에요.
             </div>
           </details>
 
@@ -392,7 +392,7 @@ export function RacePreview({ race, soundOn, onToggleSound }: RacePreviewProps) 
               <div className="hidden text-[10px] text-zinc-500 group-open:block">접기</div>
             </summary>
             <div className="mt-2 text-xs leading-5 text-zinc-400">
-              상위 30%만 발동돼요. 한 번만 써서 뒤로 보내 주는 역전 장치예요.
+              상위 30%만 발동돼요. 항상 뒤로 보내 주는 역전 장치예요.
             </div>
           </details>
         </div>
