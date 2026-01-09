@@ -86,6 +86,7 @@ export interface MarblesEngineModel {
   panCameraBy: (dx: number, dy: number) => void
   jumpCameraTo: (x: number, y: number, durationMs: number) => void
   setHighlightName: (name: string) => void
+  setSoundOn: (next: boolean) => void
 }
 
 export function useMarblesEngine(): MarblesEngineModel {
@@ -187,6 +188,20 @@ export function useMarblesEngine(): MarblesEngineModel {
     gameRef.current?.setHighlightName(name)
   }
 
+  function setSoundOn(next: boolean) {
+    const game = gameRef.current
+
+    if (!next) {
+      game?.setSfx(null)
+      return
+    }
+
+    const inst = sfxRef.current ?? new MarblesSfx()
+    inst.enable()
+    sfxRef.current = inst
+    game?.setSfx(inst)
+  }
+
   // NOTE: 클라이언트 준비 상태를 표시해요(이 훅은 클라이언트에서만 실행되지만, UI 게이팅을 위해 플래그를 둬요).
   useEffect(() => {
     setIsClientReady(true)
@@ -273,5 +288,6 @@ export function useMarblesEngine(): MarblesEngineModel {
     panCameraBy,
     jumpCameraTo,
     setHighlightName,
+    setSoundOn,
   }
 }

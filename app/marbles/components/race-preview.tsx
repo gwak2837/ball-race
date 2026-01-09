@@ -28,15 +28,18 @@ interface DragState {
 
 export interface RacePreviewProps {
   race: RacePreviewModel
+  soundOn: boolean
+  onToggleSound: (next: boolean) => void
 }
 
-export function RacePreview({ race }: RacePreviewProps) {
+export function RacePreview({ race, soundOn, onToggleSound }: RacePreviewProps) {
   const { phase, uiSnap, canvasWrapRef, panCameraBy, jumpCameraTo } = race
   const videoShellRef = useRef<HTMLDivElement | null>(null)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const dragRef = useRef<DragState | undefined>(undefined)
   const world = uiSnap?.world
   const cam = uiSnap?.camera
+  const winner = uiSnap?.winner
 
   function stopPropagation(e: { stopPropagation: () => void }) {
     e.stopPropagation()
@@ -103,6 +106,10 @@ export function RacePreview({ race }: RacePreviewProps) {
     jumpCameraTo(targetX, targetY, ms('4s'))
   }
 
+  function onClickSound() {
+    onToggleSound(!soundOn)
+  }
+
   // NOTE: 브라우저 fullscreen 상태(외부 시스템)를 React UI 상태와 동기화해요
   useEffect(() => {
     function onFsChange() {
@@ -138,6 +145,15 @@ export function RacePreview({ race }: RacePreviewProps) {
         <div className="absolute right-3 top-3 flex gap-2">
           <button
             type="button"
+            className="rounded-xl border border-white/10 bg-black/40 px-3 py-1 text-xs text-zinc-200 backdrop-blur aria-pressed:border-white/30 aria-pressed:bg-white/5"
+            aria-pressed={soundOn}
+            onPointerDown={stopPropagation}
+            onClick={onClickSound}
+          >
+            {soundOn ? '소리 켜짐' : '소리 꺼짐'}
+          </button>
+          <button
+            type="button"
             className="rounded-xl border border-white/10 bg-black/40 px-3 py-1 text-xs text-zinc-200 backdrop-blur"
             onPointerDown={stopPropagation}
             onClick={onToggleFullscreen}
@@ -145,6 +161,45 @@ export function RacePreview({ race }: RacePreviewProps) {
             {isFullscreen ? '전체화면 종료' : '전체화면'}
           </button>
         </div>
+
+        {uiSnap?.top10?.length ? (
+          <details
+            className="group absolute left-3 top-3 w-[min(280px,calc(100%-24px))]"
+            onPointerDown={stopPropagation}
+          >
+            <summary className="list-none [&::-webkit-details-marker]:hidden">
+              <span className="inline-flex h-9 w-full items-center justify-between gap-2 rounded-xl border border-white/10 bg-black/55 px-3 text-xs font-medium text-zinc-200 backdrop-blur">
+                <span className="min-w-0 truncate">
+                  Top10 · 1위 <span className="font-semibold">{uiSnap.top10[0]?.name}</span>
+                </span>
+                <span className="text-[10px] text-zinc-400 group-open:hidden">열기</span>
+                <span className="text-[10px] text-zinc-400 hidden group-open:inline">닫기</span>
+              </span>
+            </summary>
+            <div className="mt-2 rounded-xl border border-white/10 bg-black/55 p-2 backdrop-blur">
+              <ol className="flex flex-col gap-1">
+                {uiSnap.top10.map((r) => (
+                  <li
+                    key={`${r.rank}-${r.id}`}
+                    className="flex items-center justify-between gap-2 rounded-lg px-2 py-1 text-xs data-[selected=true]:bg-white/5"
+                    data-selected={r.isFocusTarget}
+                  >
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="w-4 shrink-0 text-[10px] tabular-nums text-zinc-400">{r.rank}</span>
+                      <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: r.colorHex }} />
+                      <span className="truncate" style={{ color: r.colorHex }}>
+                        {r.name}
+                      </span>
+                    </div>
+                    <span className="shrink-0 text-[10px] font-semibold tabular-nums text-zinc-300">
+                      {uiSnap.winner?.id === r.id ? '우승' : r.didFinish ? '완주' : ''}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          </details>
+        ) : null}
 
         {world && cam ? (
           <details className="group absolute bottom-3 right-3" onPointerDown={stopPropagation}>
@@ -209,7 +264,7 @@ export function RacePreview({ race }: RacePreviewProps) {
             <div className="flex items-end justify-between gap-4">
               <div className="flex flex-col">
                 <div className="text-sm font-semibold text-amber-200">골든 모먼트</div>
-                <div className="text-xs text-amber-100/70">결승 직전 초근접 경합이에요.</div>
+                <div className="text-xs text-amber-100/70">결승 직전 초근접 경합</div>
               </div>
               <div className="text-2xl font-semibold tabular-nums tracking-tight text-amber-100">
                 {Math.max(0, Math.ceil(uiSnap.slowMo.remainingMs / ms('1s')))}
@@ -219,9 +274,9 @@ export function RacePreview({ race }: RacePreviewProps) {
         ) : null}
 
         {phase === 'running' && uiSnap?.fastForward && uiSnap.fastForward.scale > 1 ? (
-          <div className="pointer-events-none absolute left-3 top-3 rounded-2xl border border-sky-200/10 bg-sky-400/10 px-3 py-2 text-xs text-sky-100/90 backdrop-blur">
+          <div className="pointer-events-none absolute right-3 top-14 rounded-2xl border border-sky-200/10 bg-sky-400/10 px-3 py-2 text-xs text-sky-100/90 backdrop-blur">
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-sky-200">빨리감기예요</span>
+              <span className="font-semibold text-sky-200">빨리감기</span>
               <span className="tabular-nums text-sky-100/80">×{uiSnap.fastForward.scale}</span>
             </div>
           </div>
@@ -238,13 +293,14 @@ export function RacePreview({ race }: RacePreviewProps) {
           </div>
         ) : null}
 
-        {uiSnap?.winner && uiSnap.postFinish && uiSnap.postFinish.remainingMs > 0 ? (
+        {phase === 'running' && winner && uiSnap?.winnerToast && uiSnap.winnerToast.remainingMs > 0 ? (
           <div className="pointer-events-none absolute inset-x-0 top-14 flex items-center justify-center">
             <div className="rounded-2xl border border-white/10 bg-black/40 px-4 py-2 text-sm text-zinc-200 backdrop-blur-sm">
-              <span className="font-medium" style={{ color: uiSnap.winner.colorHex }}>
-                {uiSnap.winner.name}
+              <span className="text-zinc-300">1등은 </span>
+              <span className="font-semibold" style={{ color: winner.colorHex }}>
+                {winner.name}
               </span>
-              님이 들어갔어요.
+              <span className="text-zinc-300"> 님이에요.</span>
             </div>
           </div>
         ) : null}
@@ -293,8 +349,8 @@ export function RacePreview({ race }: RacePreviewProps) {
               <div className="hidden text-[10px] text-zinc-500 group-open:block">접기</div>
             </summary>
             <div className="mt-2 text-xs leading-5 text-zinc-400">
-              시간 게이트예요. 첫 번째는 한 번 튕기고 통과하고, 두/세 번째는{' '}
-              <span className="text-zinc-200">가끔(5%)</span> 바로 통과해요.
+              첫 번째는 무조건 튕기고, 두번째부터
+              <span className="text-zinc-200">가끔(5%)</span> 통과해요.
             </div>
           </details>
 
@@ -336,7 +392,7 @@ export function RacePreview({ race }: RacePreviewProps) {
               <div className="hidden text-[10px] text-zinc-500 group-open:block">접기</div>
             </summary>
             <div className="mt-2 text-xs leading-5 text-zinc-400">
-              하위 30%만 발동돼요. 한 번만 써서 앞으로 보내 주는 역전 장치예요.
+              상위 30%만 발동돼요. 한 번만 써서 뒤로 보내 주는 역전 장치예요.
             </div>
           </details>
         </div>

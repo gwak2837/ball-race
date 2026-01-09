@@ -1,4 +1,4 @@
-import type { ChangeEvent } from 'react'
+import type { ChangeEvent, FormEvent, KeyboardEvent } from 'react'
 import { useState } from 'react'
 
 import ms from 'ms'
@@ -20,7 +20,6 @@ export function SetupPanel({ setup, engine, onStart }: SetupPanelProps) {
     autoCount,
     namesText,
     highlightName,
-    soundOn,
     gravityY,
     minRoundSec,
     participantsPreview,
@@ -28,13 +27,29 @@ export function SetupPanel({ setup, engine, onStart }: SetupPanelProps) {
     setAutoCount,
     setNamesText,
     setHighlightName: setSetupHighlightName,
-    setSoundOn,
     setGravityY,
     setMinRoundSec,
   } = setup
 
   const { canStart, phase, uiSnap, reset, focusByName, setHighlightName: setEngineHighlightName } = engine
   const [focusFeedback, setFocusFeedback] = useState<string | null>(null)
+  const [isSetupOpenDuringRun, setIsSetupOpenDuringRun] = useState(false)
+
+  function onToggleSetup(e: { currentTarget: HTMLDetailsElement }) {
+    if (phase === 'running') {
+      setIsSetupOpenDuringRun(e.currentTarget.open)
+    }
+  }
+
+  function onStartAndCollapse() {
+    onStart()
+    setIsSetupOpenDuringRun(false)
+  }
+
+  function onResetAndExpand() {
+    reset()
+    setIsSetupOpenDuringRun(true)
+  }
 
   function onSelectAutoMode() {
     setSetupMode('auto')
@@ -54,6 +69,15 @@ export function SetupPanel({ setup, engine, onStart }: SetupPanelProps) {
     setNamesText(e.target.value)
   }
 
+  function onNamesTextKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.nativeEvent.isComposing) return
+    if (e.key !== 'Enter') return
+    if (!e.metaKey && !e.ctrlKey) return
+    e.preventDefault()
+    if (!canStart || phase === 'running') return
+    onStartAndCollapse()
+  }
+
   function onHighlightNameChange(e: ChangeEvent<HTMLInputElement>) {
     const next = e.target.value
     setSetupHighlightName(next)
@@ -67,9 +91,11 @@ export function SetupPanel({ setup, engine, onStart }: SetupPanelProps) {
     window.setTimeout(() => setFocusFeedback(null), ms('2s'))
   }
 
-  function onToggleSound() {
-    trackGAEvent('ui_click', { target: 'sound_toggle', next: soundOn ? 'off' : 'on' })
-    setSoundOn((v) => !v)
+  function onSubmitFocus(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    if (phase === 'running') {
+      onClickFocus()
+    }
   }
 
   function onGravityChange(e: ChangeEvent<HTMLInputElement>) {
@@ -89,128 +115,135 @@ export function SetupPanel({ setup, engine, onStart }: SetupPanelProps) {
         </span>
       </div>
 
-      <div className="flex gap-2">
-        <button
-          type="button"
-          className="rounded-full border border-white/10 px-3 py-1 text-sm aria-pressed:border-white/30 aria-pressed:bg-white/5"
-          aria-pressed={setupMode === 'auto'}
-          onClick={onSelectAutoMode}
-        >
-          자동 생성
-        </button>
-        <button
-          type="button"
-          className="rounded-full border border-white/10 px-3 py-1 text-sm aria-pressed:border-white/30 aria-pressed:bg-white/5"
-          aria-pressed={setupMode === 'paste'}
-          onClick={onSelectPasteMode}
-        >
-          복붙 입력
-        </button>
-      </div>
+      <details
+        className="group rounded-2xl border border-white/10 bg-zinc-950/40 p-3"
+        open={phase !== 'running' || isSetupOpenDuringRun}
+        onToggle={onToggleSetup}
+      >
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+          <div className="flex flex-col gap-0.5">
+            <div className="text-sm font-medium text-zinc-200">참가자/경기 설정</div>
+            <div className="text-xs text-zinc-500">
+              {phase === 'running' ? '진행 중에는 자동으로 접혀요.' : '시작 전에 여기서 준비해요.'}
+            </div>
+          </div>
+          <div className="shrink-0 text-xs text-zinc-400 group-open:hidden">열기</div>
+          <div className="shrink-0 hidden text-xs text-zinc-400 group-open:block">접기</div>
+        </summary>
 
-      {setupMode === 'auto' ? (
-        <label className="flex flex-col gap-2">
-          <span className="text-sm text-zinc-300">자동 생성 인원(최대 1,000명)</span>
-          <input
-            className="h-10 rounded-xl border border-white/10 bg-zinc-950 px-3 text-sm outline-none focus:border-white/30"
-            type="number"
-            min={1}
-            max={1000}
-            value={autoCount}
-            onChange={onAutoCountChange}
-          />
-        </label>
-      ) : (
-        <label className="flex flex-col gap-2">
-          <span className="text-sm text-zinc-300">닉네임을 줄바꿈으로 붙여 넣어 주세요</span>
-          <textarea
-            className="min-h-40 resize-y rounded-xl border border-white/10 bg-zinc-950 px-3 py-2 text-sm leading-6 outline-none focus:border-white/30"
-            placeholder={'예)\n치즈\n고양이\n참가자0007'}
-            value={namesText}
-            onChange={onNamesTextChange}
-          />
-        </label>
-      )}
+        <div className="mt-3 flex flex-col gap-4">
+          <div className="flex gap-2">
+            <button
+              type="button"
+              className="rounded-full border border-white/10 px-3 py-1 text-sm aria-pressed:border-white/30 aria-pressed:bg-white/5"
+              aria-pressed={setupMode === 'auto'}
+              onClick={onSelectAutoMode}
+            >
+              자동 생성
+            </button>
+            <button
+              type="button"
+              className="rounded-full border border-white/10 px-3 py-1 text-sm aria-pressed:border-white/30 aria-pressed:bg-white/5"
+              aria-pressed={setupMode === 'paste'}
+              onClick={onSelectPasteMode}
+            >
+              복붙 입력
+            </button>
+          </div>
 
-      <label className="flex flex-col gap-2">
-        <span className="text-sm text-zinc-300">강조 닉네임(후광 + Top10 강조예요)</span>
-        <div className="flex gap-2">
+          {setupMode === 'auto' ? (
+            <label className="flex flex-col gap-2">
+              <span className="text-sm text-zinc-300">자동 생성 인원(최대 1,000명)</span>
+              <input
+                className="h-10 rounded-xl border border-white/10 bg-zinc-950 px-3 text-sm outline-none focus:border-white/30"
+                type="number"
+                min={1}
+                max={1000}
+                value={autoCount}
+                onChange={onAutoCountChange}
+              />
+            </label>
+          ) : (
+            <label className="flex flex-col gap-2">
+              <span className="text-sm text-zinc-300">닉네임을 줄바꿈으로 붙여 넣어 주세요</span>
+              <textarea
+                className="min-h-40 resize-y rounded-xl border border-white/10 bg-zinc-950 px-3 py-2 text-sm leading-6 outline-none focus:border-white/30"
+                placeholder={'예)\n치즈\n고양이\n참가자0007'}
+                value={namesText}
+                onChange={onNamesTextChange}
+                onKeyDown={onNamesTextKeyDown}
+              />
+            </label>
+          )}
+
+          <label className="flex flex-col gap-2 rounded-xl border border-white/10 bg-zinc-950 px-3 py-2">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-zinc-300">중력</div>
+              <div className="text-xs tabular-nums text-zinc-400">{gravityY}</div>
+            </div>
+            <input
+              className="w-full accent-white"
+              type="range"
+              min={500}
+              max={1500}
+              step={25}
+              value={gravityY}
+              disabled={phase === 'running'}
+              onChange={onGravityChange}
+            />
+            <div className="text-xs text-zinc-500">너무 빠르면 낮추고, 답답하면 올려 주세요.</div>
+          </label>
+
+          <label className="flex flex-col gap-2 rounded-xl border border-white/10 bg-zinc-950 px-3 py-2">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-zinc-300">자동 종료 최소 시간</div>
+              <div className="text-xs tabular-nums text-zinc-400">{minRoundSec}초</div>
+            </div>
+            <input
+              className="w-full accent-white"
+              type="range"
+              min={10}
+              max={180}
+              step={5}
+              value={minRoundSec}
+              disabled={phase === 'running'}
+              onChange={onMinRoundSecChange}
+            />
+            <div className="text-xs text-zinc-500">이 시간 전에는 완주가 나와도 끝나지 않아요.</div>
+          </label>
+        </div>
+      </details>
+
+      <div className="flex flex-col gap-2">
+        <label htmlFor="highlight-name" className="text-sm text-zinc-300">
+          강조 닉네임
+        </label>
+        <form className="flex gap-2" onSubmit={onSubmitFocus}>
           <input
+            id="highlight-name"
+            name="highlight-name"
             className="h-10 flex-1 rounded-xl border border-white/10 bg-zinc-950 px-3 text-sm outline-none focus:border-white/30"
             placeholder="예: 치즈"
             value={highlightName}
             onChange={onHighlightNameChange}
           />
           <button
-            type="button"
+            type="submit"
             className="h-10 rounded-xl border border-white/10 px-3 text-sm text-zinc-200 disabled:opacity-40"
             disabled={phase !== 'running'}
-            onClick={onClickFocus}
           >
             포커스
           </button>
-        </div>
-        {focusFeedback ? (
-          <div className="text-xs text-zinc-400">{focusFeedback}</div>
-        ) : (
-          <div className="text-xs text-zinc-500">포커스는 몇 초만 보여주고 자동으로 돌아와요.</div>
-        )}
-      </label>
-
-      <div className="flex items-center justify-between rounded-xl border border-white/10 bg-zinc-950 px-3 py-2">
-        <div className="text-sm text-zinc-300">사운드</div>
-        <button
-          type="button"
-          className="rounded-full border border-white/10 px-3 py-1 text-xs text-zinc-200 aria-pressed:border-white/30 aria-pressed:bg-white/5"
-          aria-pressed={soundOn}
-          onClick={onToggleSound}
-        >
-          {soundOn ? '켜짐' : '꺼짐'}
-        </button>
+        </form>
+        {focusFeedback ? <div className="text-xs text-zinc-400">{focusFeedback}</div> : null}
       </div>
-
-      <label className="flex flex-col gap-2 rounded-xl border border-white/10 bg-zinc-950 px-3 py-2">
-        <div className="flex items-center justify-between">
-          <div className="text-sm text-zinc-300">중력</div>
-          <div className="text-xs tabular-nums text-zinc-400">{gravityY}</div>
-        </div>
-        <input
-          className="w-full accent-white"
-          type="range"
-          min={500}
-          max={1500}
-          step={25}
-          value={gravityY}
-          disabled={phase === 'running'}
-          onChange={onGravityChange}
-        />
-        <div className="text-xs text-zinc-500">너무 빠르면 낮추고, 답답하면 올려 주세요.</div>
-      </label>
-
-      <label className="flex flex-col gap-2 rounded-xl border border-white/10 bg-zinc-950 px-3 py-2">
-        <div className="flex items-center justify-between">
-          <div className="text-sm text-zinc-300">자동 종료 최소 시간</div>
-          <div className="text-xs tabular-nums text-zinc-400">{minRoundSec}초</div>
-        </div>
-        <input
-          className="w-full accent-white"
-          type="range"
-          min={10}
-          max={180}
-          step={5}
-          value={minRoundSec}
-          disabled={phase === 'running'}
-          onChange={onMinRoundSecChange}
-        />
-        <div className="text-xs text-zinc-500">이 시간 전에는 완주가 나와도 끝나지 않아요.</div>
-      </label>
 
       <div className="flex gap-2">
         <button
           type="button"
           className="h-11 flex-1 rounded-xl bg-white text-sm font-medium text-zinc-950 disabled:opacity-40"
           disabled={!canStart || phase === 'running'}
-          onClick={onStart}
+          onClick={onStartAndCollapse}
         >
           시작할게요
         </button>
@@ -218,13 +251,13 @@ export function SetupPanel({ setup, engine, onStart }: SetupPanelProps) {
           type="button"
           className="h-11 rounded-xl border border-white/10 px-3 text-sm text-zinc-200 disabled:opacity-40"
           disabled={phase === 'setup'}
-          onClick={reset}
+          onClick={onResetAndExpand}
         >
           리셋
         </button>
       </div>
 
-      {uiSnap ? (
+      {uiSnap && (
         <div className="mt-2 rounded-2xl border border-white/10 bg-zinc-950 p-3">
           <div className="flex items-center justify-between">
             <div className="text-sm font-medium">Top 10</div>
@@ -233,13 +266,13 @@ export function SetupPanel({ setup, engine, onStart }: SetupPanelProps) {
               {uiSnap.eliminatedCount.toLocaleString()}
             </div>
           </div>
-          {uiSnap.eliminatedBy ? (
+          {uiSnap.eliminatedBy && (
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-400">
               <div>낙사 {uiSnap.eliminatedBy.fall.toLocaleString()}</div>
               <div>컷 {uiSnap.eliminatedBy.cut.toLocaleString()}</div>
               <div className="text-zinc-500">경과 {Math.max(0, Math.round(uiSnap.elapsedMs / ms('1s')))}초</div>
             </div>
-          ) : null}
+          )}
           {/* Reserve ONE slot to avoid CLS when notices appear/disappear */}
           <div className="mt-2 min-h-16">
             {uiSnap.slowMo && uiSnap.slowMo.remainingMs > 0 ? (
@@ -250,7 +283,7 @@ export function SetupPanel({ setup, engine, onStart }: SetupPanelProps) {
                     {Math.max(0, Math.ceil(uiSnap.slowMo.remainingMs / ms('1s')))}초
                   </div>
                 </div>
-                <div className="mt-1 text-xs text-amber-100/70">결승 직전 초근접 경합이에요.</div>
+                <div className="mt-1 text-xs text-amber-100/70">결승 직전 초근접 경합</div>
               </div>
             ) : uiSnap.cut ? (
               <div className="rounded-xl border border-white/10 bg-white/5 p-3 text-sm">
@@ -267,7 +300,7 @@ export function SetupPanel({ setup, engine, onStart }: SetupPanelProps) {
             ) : uiSnap.fastForward && uiSnap.fastForward.scale > 1 ? (
               <div className="rounded-xl border border-sky-200/10 bg-sky-400/10 p-3 text-sm">
                 <div className="flex items-center justify-between">
-                  <div className="font-semibold text-sky-200">빨리감기예요</div>
+                  <div className="font-semibold text-sky-200">빨리감기</div>
                   <div className="text-xs tabular-nums text-sky-100/80">×{uiSnap.fastForward.scale}</div>
                 </div>
                 <div className="mt-1 text-xs text-sky-100/70">Top10이 나와서 빠르게 마무리 중이에요.</div>
@@ -279,7 +312,7 @@ export function SetupPanel({ setup, engine, onStart }: SetupPanelProps) {
           <ol className="mt-2 flex flex-col gap-1">
             {uiSnap.top10.map((r) => (
               <li
-                key={r.id}
+                key={`${r.rank}-${r.id}`}
                 className="flex items-center justify-between gap-3 rounded-xl px-2 py-1 text-sm data-[selected=true]:bg-white/5"
                 data-selected={r.isFocusTarget}
               >
@@ -306,7 +339,7 @@ export function SetupPanel({ setup, engine, onStart }: SetupPanelProps) {
               </li>
             ))}
           </ol>
-          {uiSnap.winner ? (
+          {uiSnap.winner && (
             <div className="mt-3 rounded-xl bg-white/5 px-3 py-2 text-sm">
               <span className="text-zinc-300">우승은 </span>
               <span className="font-semibold" style={{ color: uiSnap.winner.colorHex }}>
@@ -314,28 +347,30 @@ export function SetupPanel({ setup, engine, onStart }: SetupPanelProps) {
               </span>
               <span className="text-zinc-300"> 님이에요.</span>
             </div>
-          ) : null}
+          )}
         </div>
-      ) : null}
+      )}
 
-      <div className="mt-2 flex flex-col gap-2">
-        <div className="text-xs text-zinc-400">참가자 미리보기 (최대 12명까지)</div>
-        <ul className="grid grid-cols-3 gap-2">
-          {participantsPreview.map((p) => (
-            <li key={p.id} className="rounded-xl border border-white/10 bg-zinc-950 px-2 py-2">
-              <div className="flex items-center gap-2">
-                <span
-                  className="inline-flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold text-zinc-950"
-                  style={{ backgroundColor: p.colorHex }}
-                >
-                  {p.initials}
-                </span>
-                <span className="truncate text-xs text-zinc-200">{p.name}</span>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </div>
+      {phase !== 'running' && (
+        <div className="mt-2 flex flex-col gap-2">
+          <div className="text-xs text-zinc-400">참가자 미리보기 (최대 12명까지)</div>
+          <ul className="grid grid-cols-3 gap-2">
+            {participantsPreview.map((p) => (
+              <li key={p.id} className="rounded-xl border border-white/10 bg-zinc-950 px-2 py-2">
+                <div className="flex items-center gap-2">
+                  <span
+                    className="inline-flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold text-zinc-950"
+                    style={{ backgroundColor: p.colorHex }}
+                  >
+                    {p.initials}
+                  </span>
+                  <span className="truncate text-xs text-zinc-200">{p.name}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </section>
   )
 }

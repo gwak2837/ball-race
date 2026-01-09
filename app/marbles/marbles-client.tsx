@@ -32,6 +32,12 @@ export function MarblesClient() {
     })
   }
 
+  function onToggleSound(next: boolean) {
+    setup.setSoundOn(next)
+    engine.setSoundOn(next)
+    trackGAEvent('ui_click', { target: 'sound_toggle', next: next ? 'on' : 'off' })
+  }
+
   return (
     <div className="min-h-dvh bg-zinc-950 text-zinc-50">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-8">
@@ -42,7 +48,7 @@ export function MarblesClient() {
 
         <div className="grid gap-6 lg:grid-cols-[420px_1fr]">
           <SetupPanel setup={setup} engine={engine} onStart={onStart} />
-          <RacePreview race={engine} />
+          <RacePreview race={engine} soundOn={soundOn} onToggleSound={onToggleSound} />
         </div>
       </div>
     </div>

@@ -37,6 +37,7 @@ export interface MarblesUiSnapshot {
   focus?: { name: string; remainingMs: number } | undefined
   postFinish?: { remainingMs: number } | undefined
   winner?: { id: string; name: string; colorHex: string } | undefined
+  winnerToast?: { remainingMs: number } | undefined
 }
 
 type UiCallback = (snap: MarblesUiSnapshot) => void
@@ -64,6 +65,7 @@ interface MarbleRuntime {
   ball: PIXI.Sprite
   ring: PIXI.Sprite
   label?: PIXI.Text | undefined
+  nameTag?: { wrap: PIXI.Container; bg: PIXI.Graphics; text: PIXI.Text } | undefined
   progressY: number
   lastProgressY: number
   lastY: number
@@ -183,25 +185,93 @@ function hexToPixiTint(hex: string): number {
   return Number.parseInt(v, 16)
 }
 
+function srgbToLinear01(c: number): number {
+  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4
+}
+
+function relativeLuminance(hex: string): number {
+  const v = hex.replace('#', '')
+  if (v.length !== 6) return 1
+  const n = Number.parseInt(v, 16)
+  const r = ((n >> 16) & 0xff) / 255
+  const g = ((n >> 8) & 0xff) / 255
+  const b = (n & 0xff) / 255
+  const rl = srgbToLinear01(r)
+  const gl = srgbToLinear01(g)
+  const bl = srgbToLinear01(b)
+  return 0.2126 * rl + 0.7152 * gl + 0.0722 * bl
+}
+
+function labelColorsForBall(hex: string): { fill: number; stroke: number } {
+  const lum = relativeLuminance(hex)
+  // Palette is mid-light, but some hues still get dark enough that black text becomes hard to read.
+  if (lum < 0.42) {
+    return { fill: 0xffffff, stroke: 0x0a0a0a }
+  }
+  return { fill: 0x0a0a0a, stroke: 0xffffff }
+}
+
 function maybeCreateLabel({ PIXI, marble }: { PIXI: typeof import('pixi.js'); marble: MarbleRuntime }): PIXI.Text {
   if (marble.label) {
     return marble.label
   }
+  const c = labelColorsForBall(marble.participant.colorHex)
   const t = new PIXI.Text({
     text: marble.participant.initials,
     style: {
       fontFamily: 'var(--font-geist-sans)',
-      fontSize: 10,
+      fontSize: 24,
       fontWeight: '700',
-      fill: 0x0a0a0a,
+      fill: c.fill,
+      stroke: { color: c.stroke, width: 3, join: 'round' },
       align: 'center',
     },
   })
   t.anchor.set(0.5)
-  t.y = 0
+  // NOTE: 기본 라벨(이니셜)은 공 "상단"에 보여줘요.
+  // 전체 닉네임 태그(강조/포커스)와 겹치지 않도록 적당히 아래로 붙여요.
+  t.y = -(MARBLE_R + 16)
   marble.display.addChild(t)
   marble.label = t
   return t
+}
+
+function maybeCreateNameTag({ PIXI, marble }: { PIXI: typeof import('pixi.js'); marble: MarbleRuntime }) {
+  if (marble.nameTag) {
+    return marble.nameTag
+  }
+
+  const wrap = new PIXI.Container()
+  wrap.y = -(MARBLE_R + 18)
+
+  const bg = new PIXI.Graphics()
+  const text = new PIXI.Text({
+    text: marble.participant.name,
+    style: {
+      fontFamily: 'var(--font-geist-sans)',
+      fontSize: 24,
+      fontWeight: '600',
+      fill: 0xffffff,
+      align: 'center',
+    },
+  })
+  text.anchor.set(0.5)
+
+  const padX = 8
+  const padY = 4
+  const radius = 10
+  const w = Math.max(24, Math.ceil(text.width))
+  const h = Math.max(16, Math.ceil(text.height))
+  const gap = 6
+  wrap.y = -(MARBLE_R + gap + (h / 2 + padY))
+  bg.roundRect(-(w / 2) - padX, -(h / 2) - padY, w + padX * 2, h + padY * 2, radius)
+    .fill({ color: 0x000000, alpha: 0.55 })
+    .stroke({ color: 0xffffff, width: 1, alpha: 0.14 })
+
+  wrap.addChild(bg, text)
+  marble.display.addChild(wrap)
+  marble.nameTag = { wrap, bg, text }
+  return marble.nameTag
 }
 
 function computeSpawnPositions(count: number): Array<{ x: number; y: number }> {
@@ -267,6 +337,7 @@ export class MarblesGame {
 
   private bottom30MaxProgress = Number.NEGATIVE_INFINITY
   private top10MinProgress = Number.POSITIVE_INFINITY
+  private top30MinProgress = Number.POSITIVE_INFINITY
 
   private timeScale = 1
   private slowMoUntilMs = 0
@@ -275,6 +346,7 @@ export class MarblesGame {
 
   private finishState: { winnerId: string; postEndsAtMs: number; stopAtMs: number } | null = null
   private winner: { id: string; name: string; colorHex: string } | null = null
+  private winnerToastUntilMs = 0
   private eliminatedBy = { fall: 0, cut: 0 }
   private minRoundEndsAtMs = 0
 
@@ -317,6 +389,8 @@ export class MarblesGame {
   private sfx: MarblesSfx | null = null
   private lastClickAtMs = 0
   private lastEventSfxAtMs = 0
+  private sfxTargetId: string | null = null
+  private sfxCollisionTargetHandle: number | null = null
   private camera: CameraState = {
     x: 0,
     y: 0,
@@ -346,8 +420,11 @@ export class MarblesGame {
     this.sfx = opts.sfx ?? null
     this.lastClickAtMs = 0
     this.lastEventSfxAtMs = 0
+    this.sfxTargetId = null
+    this.sfxCollisionTargetHandle = null
     this.finishState = null
     this.winner = null
+    this.winnerToastUntilMs = 0
     this.cupEntries = []
     this.cupEntryById.clear()
     this.eliminatedBy = { fall: 0, cut: 0 }
@@ -390,6 +467,7 @@ export class MarblesGame {
     this.fastForwardOn = false
     this.bottom30MaxProgress = Number.NEGATIVE_INFINITY
     this.top10MinProgress = Number.POSITIVE_INFINITY
+    this.top30MinProgress = Number.POSITIVE_INFINITY
 
     this.buildMap()
     this.spawnMarbles(opts.participants)
@@ -406,8 +484,11 @@ export class MarblesGame {
     this.sfx = null
     this.lastClickAtMs = 0
     this.lastEventSfxAtMs = 0
+    this.sfxTargetId = null
+    this.sfxCollisionTargetHandle = null
     this.finishState = null
     this.winner = null
+    this.winnerToastUntilMs = 0
     this.cupEntries = []
     this.cupEntryById.clear()
     this.eliminatedBy = { fall: 0, cut: 0 }
@@ -429,6 +510,7 @@ export class MarblesGame {
     this.fastForwardOn = false
     this.bottom30MaxProgress = Number.NEGATIVE_INFINITY
     this.top10MinProgress = Number.POSITIVE_INFINITY
+    this.top30MinProgress = Number.POSITIVE_INFINITY
 
     this.marblesByCollider.clear()
     this.marbles = []
@@ -458,6 +540,15 @@ export class MarblesGame {
 
   setHighlightName(name: string) {
     this.highlightName = name.trim()
+  }
+
+  setSfx(sfx: MarblesSfx | null) {
+    this.sfx = sfx
+    this.lastClickAtMs = 0
+    this.lastEventSfxAtMs = 0
+    if (!sfx) {
+      this.clearSfxCollisionTarget()
+    }
   }
 
   panCameraBy(dx: number, dy: number) {
@@ -550,7 +641,6 @@ export class MarblesGame {
 
     this.updateCamera(now)
     this.render(now)
-    this.maybePlayCollisionClicks(now)
     this.emitUi(false)
 
     if (this.finishState) {
@@ -568,69 +658,99 @@ export class MarblesGame {
     }
   }
 
-  private maybePlayCollisionClicks(nowMs: number) {
-    const sfx = this.sfx
-    if (!sfx) return
+  private clearSfxCollisionTarget() {
+    const h = this.sfxCollisionTargetHandle
+    if (h) {
+      const prev = this.marblesByCollider.get(h)
+      // NOTE: If the collider is already removed, it's not in the map anymore (safe).
+      if (prev) prev.collider.setActiveEvents(0)
+    }
+    this.sfxCollisionTargetHandle = null
+    this.sfxTargetId = null
+  }
 
-    const elapsedMs = nowMs - this.startedAtMs
+  private pickSfxTargetMarble(): MarbleRuntime | null {
+    const alive = this.marbles.filter((m) => !m.isEliminated)
+    if (alive.length === 0) return null
 
-    // Focus mode: only play "camera sound" for the focused marble (less noise).
-    const focusId = this.camera.mode === 'focus' ? this.camera.focusId : null
-    if (focusId) {
-      const m = this.marbles.find((x) => !x.isEliminated && x.participant.id === focusId)
-      if (!m) return
+    // Explicit focus beats everything.
+    if (this.camera.mode === 'focus' && this.camera.focusId) {
+      return alive.find((m) => m.participant.id === this.camera.focusId) ?? null
+    }
 
-      const v = m.body.linvel()
-      const speed = Math.hypot(v.x, v.y)
-      // Map speed -> intensity. We keep a small dead-zone so it's quiet when the marble is slow/stuck.
-      const intensity = clamp((speed - 400) / 3800, 0, 1)
-      if (intensity < 0.14) return
+    // Manual camera: pick the marble closest to the view center (only if actually in view).
+    if (this.camera.mode === 'manual') {
+      const cx = this.camera.x + SCREEN_W / 2
+      const cy = this.camera.y + SCREEN_H * CAMERA_Y_ANCHOR
+      let best: MarbleRuntime | null = null
+      let bestD2 = Number.POSITIVE_INFINITY
+      for (const m of alive) {
+        const p = m.body.translation()
+        if (!this.isInCameraView(p.x, p.y, 0)) continue
+        const dx = p.x - cx
+        const dy = p.y - cy
+        const d2 = dx * dx + dy * dy
+        if (d2 < bestD2) {
+          bestD2 = d2
+          best = m
+        }
+      }
+      return best
+    }
 
-      // Early game limiter: even a single marble can be very jittery right after spawn.
-      const earlyFactor = elapsedMs < ms('8s') ? 1.6 : elapsedMs < ms('16s') ? 1.2 : 1
+    // Auto camera follows the leader — match SFX to the same target.
+    let best: MarbleRuntime | null = null
+    for (const m of alive) {
+      if (!best || m.progressY > best.progressY) best = m
+    }
+    return best
+  }
 
-      const maxInterval = ms('190ms')
-      const minInterval = ms('70ms')
-      const interval = (maxInterval - (maxInterval - minInterval) * intensity) * earlyFactor
-      if (nowMs - this.lastClickAtMs < interval) return
-
-      this.lastClickAtMs = nowMs
-      sfx.playClick(intensity)
+  private updateSfxCollisionTarget() {
+    // Sound disabled: don't subscribe to collision events (keeps the event queue light).
+    if (!this.sfx || this.phase !== 'running') {
+      if (this.sfxCollisionTargetHandle || this.sfxTargetId) {
+        this.clearSfxCollisionTarget()
+      }
       return
     }
 
-    // Intensity ~= "how chaotic is the current camera view"
-    const x0 = this.camera.x
-    const y0 = this.camera.y
-    const x1 = x0 + SCREEN_W
-    const y1 = y0 + SCREEN_H
+    const target = this.pickSfxTargetMarble()
+    const nextId = target?.participant.id ?? null
+    const nextHandle = target?.collider.handle ?? null
 
-    let count = 0
-    let speedSum = 0
-    for (const m of this.marbles) {
-      if (m.isEliminated) continue
-      const p = m.body.translation()
-      if (p.x < x0 || p.x > x1 || p.y < y0 || p.y > y1) continue
-      count += 1
-      const v = m.body.linvel()
-      speedSum += Math.hypot(v.x, v.y)
-      if (count >= 360) break
+    this.sfxTargetId = nextId
+
+    if (!nextHandle) {
+      this.clearSfxCollisionTarget()
+      return
     }
-    if (count <= 6) return
-    const avgSpeed = speedSum / count
-    const density = clamp(count / 320, 0, 1)
-    const speed = clamp(avgSpeed / 2800, 0, 1)
-    let intensity = clamp(density * 0.7 + speed * 0.3, 0, 1)
-    if (intensity < 0.18) return
 
-    // Early game limiter: lots of simultaneous collisions can sound like noise.
-    const earlyFactor = elapsedMs < ms('8s') ? 1.8 : elapsedMs < ms('16s') ? 1.25 : 1
-    if (elapsedMs < ms('10s')) intensity *= 0.65
+    if (this.sfxCollisionTargetHandle === nextHandle) {
+      return
+    }
 
-    const maxInterval = ms('150ms')
-    const minInterval = ms('60ms')
-    const interval = (maxInterval - (maxInterval - minInterval) * intensity) * earlyFactor
-    if (nowMs - this.lastClickAtMs < interval) return
+    if (this.sfxCollisionTargetHandle) {
+      const prev = this.marblesByCollider.get(this.sfxCollisionTargetHandle)
+      if (prev) prev.collider.setActiveEvents(0)
+    }
+
+    this.sfxCollisionTargetHandle = nextHandle
+    target?.collider.setActiveEvents(this.R.ActiveEvents.COLLISION_EVENTS)
+  }
+
+  private maybePlayImpactClick(m: MarbleRuntime, nowMs: number) {
+    const sfx = this.sfx
+    if (!sfx) return
+
+    const v = m.body.linvel()
+    const speed = Math.hypot(v.x, v.y)
+    const intensity = clamp((speed - 520) / 3400, 0, 1)
+    if (intensity < 0.12) return
+
+    const elapsedMs = nowMs - this.startedAtMs
+    const minInterval = elapsedMs < ms('10s') ? ms('140ms') : ms('80ms')
+    if (nowMs - this.lastClickAtMs < minInterval) return
 
     this.lastClickAtMs = nowMs
     sfx.playClick(intensity)
@@ -644,6 +764,7 @@ export class MarblesGame {
     }
 
     this.updateObstacles(nowMs)
+    this.updateSfxCollisionTarget()
 
     // Rapier uses an internal dt; most builds expose `timestep`.
     this.world.timestep = (FIXED_STEP_MS / 1000) * this.timeScale
@@ -662,6 +783,21 @@ export class MarblesGame {
         const m = this.marblesByCollider.get(h1)
         if (m) this.onSensor(k2, h2, m, nowMs)
       }
+
+      // Collision SFX: only for the current camera target marble.
+      const targetHandle = this.sfxCollisionTargetHandle
+      if (!targetHandle) return
+      const isTarget1 = h1 === targetHandle
+      const isTarget2 = h2 === targetHandle
+      if (!isTarget1 && !isTarget2) return
+      const other = isTarget1 ? h2 : h1
+      // Ignore sensor events (those have dedicated sounds).
+      if (this.sensorKindByHandle.has(other)) return
+      // Ignore marble-to-marble collisions (too noisy; not requested).
+      if (this.marblesByCollider.has(other)) return
+      const target = this.marblesByCollider.get(targetHandle)
+      if (!target || target.isEliminated) return
+      this.maybePlayImpactClick(target, nowMs)
     })
 
     let aliveCount = 0
@@ -825,8 +961,8 @@ export class MarblesGame {
         const dx = m.magnetX - px.x
         const dy = m.magnetY - px.y
         const dist = Math.hypot(dx, dy) || 1
-        const strength = 34
-        m.body.applyImpulse({ x: (dx / dist) * strength, y: (dy / dist) * (strength * 1.15) }, true)
+        const strength = 10000
+        m.body.applyImpulse({ x: (dx / dist) * strength, y: (dy / dist) * (strength * 1.35) }, true)
       }
 
       // Finish drain: 낙사하지 않은 공은 결국 컵으로 들어오게 만들어요.
@@ -934,7 +1070,11 @@ export class MarblesGame {
   }
 
   private ensureRankThresholds() {
-    if (this.bottom30MaxProgress !== Number.NEGATIVE_INFINITY && this.top10MinProgress !== Number.POSITIVE_INFINITY) {
+    if (
+      this.bottom30MaxProgress !== Number.NEGATIVE_INFINITY &&
+      this.top10MinProgress !== Number.POSITIVE_INFINITY &&
+      this.top30MinProgress !== Number.POSITIVE_INFINITY
+    ) {
       return
     }
     const alive = this.marbles.filter((m) => !m.isEliminated)
@@ -947,14 +1087,17 @@ export class MarblesGame {
     const aliveCount = sortedDesc.length
     if (aliveCount === 0) return
 
-    const topCount = Math.max(1, Math.ceil(aliveCount * 0.1))
-    const bottomCount = Math.max(1, Math.ceil(aliveCount * 0.3))
+    const top10Count = Math.max(1, Math.ceil(aliveCount * 0.1))
+    const top30Count = Math.max(1, Math.ceil(aliveCount * 0.3))
+    const bottom30Count = Math.max(1, Math.ceil(aliveCount * 0.3))
 
-    const topIdx = clamp(topCount - 1, 0, aliveCount - 1)
-    const bottomIdx = clamp(aliveCount - bottomCount, 0, aliveCount - 1)
+    const top10Idx = clamp(top10Count - 1, 0, aliveCount - 1)
+    const top30Idx = clamp(top30Count - 1, 0, aliveCount - 1)
+    const bottom30Idx = clamp(aliveCount - bottom30Count, 0, aliveCount - 1)
 
-    this.top10MinProgress = sortedDesc[topIdx]?.progressY ?? 0
-    this.bottom30MaxProgress = sortedDesc[bottomIdx]?.progressY ?? 0
+    this.top10MinProgress = sortedDesc[top10Idx]?.progressY ?? 0
+    this.top30MinProgress = sortedDesc[top30Idx]?.progressY ?? 0
+    this.bottom30MaxProgress = sortedDesc[bottom30Idx]?.progressY ?? 0
   }
 
   private isBottom30(m: MarbleRuntime): boolean {
@@ -967,22 +1110,31 @@ export class MarblesGame {
     return m.progressY >= this.top10MinProgress
   }
 
+  private isTop30(m: MarbleRuntime): boolean {
+    this.ensureRankThresholds()
+    return m.progressY >= this.top30MinProgress
+  }
+
   private tryWarp(m: MarbleRuntime, nowMs: number) {
     if (m.warpUsed) return
-    if (!this.isBottom30(m)) return
+    if (!this.isTop30(m)) return
 
     const p0 = m.body.translation()
     m.warpUsed = true
     const x = 585 + Math.random() * 110
-    const y = 7700
+    const y = 4700
 
     m.body.setTranslation({ x, y }, true)
-    m.body.setLinvel({ x: 0, y: 2200 }, true)
+    m.body.setLinvel({ x: 0, y: 2000 }, true)
     m.body.setAngvel(0, true)
-    m.progressY = Math.max(m.progressY, y)
+    // NOTE: 워프 존은 "역전 장치"라서, 순위(진행도)도 뒤로 밀려야 체감이 좋아요.
+    m.progressY = y
+    m.lastProgressY = y
+    m.lastY = y
+    m.lastMovedAtMs = nowMs
 
-    const focusId = this.camera.mode === 'focus' ? this.camera.focusId : null
-    const allowSfx = !focusId || m.participant.id === focusId
+    const targetId = this.sfxTargetId
+    const allowSfx = Boolean(targetId && m.participant.id === targetId)
     if (allowSfx && this.isInCameraView(p0.x, p0.y, 120)) {
       this.sfx?.playWarp()
       this.camera.shakeUntilMs = nowMs + ms('220ms')
@@ -996,8 +1148,8 @@ export class MarblesGame {
 
     const p0 = m.body.translation()
     const inView = this.isInCameraView(p0.x, p0.y, 120)
-    const focusId = this.camera.mode === 'focus' ? this.camera.focusId : null
-    const allowSfx = !focusId || m.participant.id === focusId
+    const targetId = this.sfxTargetId
+    const allowSfx = Boolean(targetId && m.participant.id === targetId)
     const v = m.body.linvel()
     if (this.isBottom30(m)) {
       // Catch-up boost
@@ -1031,8 +1183,8 @@ export class MarblesGame {
 
     const p0 = m.body.translation()
     const inView = this.isInCameraView(p0.x, p0.y, 120)
-    const focusId = this.camera.mode === 'focus' ? this.camera.focusId : null
-    const allowSfx = !focusId || m.participant.id === focusId
+    const targetId = this.sfxTargetId
+    const allowSfx = Boolean(targetId && m.participant.id === targetId)
     // A dedicated deceleration pad: slows everyone a bit, top10 even more.
     const factor = this.isTop10(m) ? Math.min(0.25, pad.factor * 0.6) : pad.factor
     const v = m.body.linvel()
@@ -1052,14 +1204,14 @@ export class MarblesGame {
 
     const p0 = m.body.translation()
     const inView = this.isInCameraView(p0.x, p0.y, 140)
-    const focusId = this.camera.mode === 'focus' ? this.camera.focusId : null
-    const allowSfx = !focusId || m.participant.id === focusId
+    const targetId = this.sfxTargetId
+    const allowSfx = Boolean(targetId && m.participant.id === targetId)
     m.magnetUntilMs = nowMs + pit.durationMs
     m.magnetX = pit.x
     m.magnetY = pit.pullY
     // Immediate slowdown so it feels like a trap.
     const v = m.body.linvel()
-    m.body.setLinvel({ x: v.x * 0.25, y: v.y * 0.18 }, true)
+    m.body.setLinvel({ x: v.x * 0.12, y: v.y * 0.06 }, true)
     if (inView && allowSfx) {
       this.sfx?.playBoost('debuff')
       this.camera.shakeUntilMs = Math.max(this.camera.shakeUntilMs, nowMs + ms('120ms'))
@@ -1092,8 +1244,8 @@ export class MarblesGame {
       m.body.applyImpulse({ x: nx * base, y: ny * base - base * 0.35 }, true)
     }
 
-    const focusId = this.camera.mode === 'focus' ? this.camera.focusId : null
-    const allowSfx = !focusId || trigger.participant.id === focusId
+    const targetId = this.sfxTargetId
+    const allowSfx = Boolean(targetId && trigger.participant.id === targetId)
     if (allowSfx && this.isInCameraView(bomb.x, bomb.y, 160)) {
       this.sfx?.playCut()
       this.camera.shakeUntilMs = Math.max(this.camera.shakeUntilMs, nowMs + ms('260ms'))
@@ -1153,8 +1305,8 @@ export class MarblesGame {
       if (this.bumperFx.length > 40) this.bumperFx.splice(0, this.bumperFx.length - 40)
     }
     const inView = this.isInCameraView(kicker.x, kicker.y, 60)
-    const focusId = this.camera.mode === 'focus' ? this.camera.focusId : null
-    const allowSfx = !focusId || m.participant.id === focusId
+    const targetId = this.sfxTargetId
+    const allowSfx = Boolean(targetId && m.participant.id === targetId)
     // Global event SFX limiter (prevents early-game overlap noise)
     if (inView && allowSfx && this.sfx && kicker.playSfx) {
       const minGap = elapsedMs < ms('10s') ? ms('140ms') : ms('80ms')
@@ -1181,15 +1333,14 @@ export class MarblesGame {
 
     const sorted = alive.slice().sort((a, b) => a.progressY - b.progressY)
     const victims = sorted.slice(0, cutCount)
-    const focusId = this.camera.mode === 'focus' ? this.camera.focusId : null
-    const restrictSfxToFocus = Boolean(focusId)
-    let includesFocus = false
+    const targetId = this.sfxTargetId
+    let includesTarget = false
     for (const v of victims) {
-      if (focusId && v.participant.id === focusId) includesFocus = true
+      if (targetId && v.participant.id === targetId) includesTarget = true
       this.eliminate(v, nowMs, 'cut')
     }
 
-    if (!restrictSfxToFocus || includesFocus) {
+    if (includesTarget) {
       this.sfx?.playCut()
       this.camera.shakeUntilMs = nowMs + ms('320ms')
       this.camera.shakeAmp = 12
@@ -1244,10 +1395,9 @@ export class MarblesGame {
     this.timeScale = 0.2
     this.slowMoUntilMs = nowMs + ms('3s')
     this.slowMoCooldownUntilMs = nowMs + ms('7s')
-    const focusId = this.camera.mode === 'focus' ? this.camera.focusId : null
-    const restrictSfxToFocus = Boolean(focusId)
-    const focusInNear = focusId ? near.some((m) => m.participant.id === focusId) : false
-    if (!restrictSfxToFocus || focusInNear) {
+    const targetId = this.sfxTargetId
+    const targetInNear = targetId ? near.some((m) => m.participant.id === targetId) : false
+    if (targetInNear) {
       this.sfx?.playSlowMo()
       this.camera.shakeUntilMs = nowMs + ms('180ms')
       this.camera.shakeAmp = 4
@@ -1274,9 +1424,9 @@ export class MarblesGame {
     if (!this.winner && this.cupEntries.length > 0) {
       const first = this.cupEntries[0]
       this.winner = { id: first.id, name: first.name, colorHex: first.colorHex }
-      const focusId = this.camera.mode === 'focus' ? this.camera.focusId : null
-      const restrictSfxToFocus = Boolean(focusId)
-      if (!restrictSfxToFocus || (focusId && first.id === focusId)) {
+      this.winnerToastUntilMs = nowMs + ms('6s')
+      const targetId = this.sfxTargetId
+      if (targetId && first.id === targetId) {
         this.sfx?.playWin()
         this.camera.shakeUntilMs = Math.max(this.camera.shakeUntilMs, nowMs + ms('250ms'))
         this.camera.shakeAmp = Math.max(this.camera.shakeAmp, 8)
@@ -1327,6 +1477,12 @@ export class MarblesGame {
     this.winner = { id: first.id, name: first.name, colorHex: first.colorHex }
     this.phase = 'finished'
     this.finishState = null
+    // NOTE: If the round ends while focus is active, the UI would otherwise "freeze" with the focus overlay.
+    // Clear focus fields explicitly because there are no more ticks to naturally expire focus timers.
+    if (this.camera.mode === 'focus') this.camera.mode = 'auto'
+    this.camera.focusUntilMs = 0
+    this.camera.focusId = null
+    this.camera.focusName = null
     // Ensure visuals (e.g. cup-sink hideImmediately) apply immediately even if the round ended mid-step.
     this.render(nowMs)
     this.emitUi(true)
@@ -1381,6 +1537,7 @@ export class MarblesGame {
     }
     if (this.camera.mode === 'focus' && nowMs >= this.camera.focusUntilMs) {
       this.camera.mode = 'auto'
+      this.camera.focusUntilMs = 0
       this.camera.focusId = null
       this.camera.focusName = null
     }
@@ -1393,27 +1550,37 @@ export class MarblesGame {
       // Manual camera stores the top-left view position already.
       // Match the desiredY calculation (targetY - SCREEN_H * CAMERA_Y_ANCHOR) so manual doesn't drift.
       targetY = this.camera.y + SCREEN_H * CAMERA_Y_ANCHOR
-    } else if (this.camera.mode === 'focus' && this.camera.focusId) {
-      const t = alive.find((m) => m.participant.id === this.camera.focusId)
-      if (t) {
-        const p = t.body.translation()
-        targetY = p.y
-        targetX = p.x
-      }
     } else {
-      // Auto: follow TOP1 (alive).
-      const sorted = alive.slice().sort((a, b) => b.progressY - a.progressY)
-      // If a marble was respawned (teleported), its current y can be far above its progressY.
-      // Avoid snapping the camera back to the top in that case.
-      const leader =
-        sorted.find((m) => {
-          const p = m.body.translation()
-          return m.progressY - p.y < 1200
-        }) ?? sorted[0]
-      const p = leader?.body.translation()
-      if (p) {
-        targetY = p.y
-        targetX = p.x
+      if (this.camera.mode === 'focus' && this.camera.focusId) {
+        const t = alive.find((m) => m.participant.id === this.camera.focusId)
+        if (t) {
+          const p = t.body.translation()
+          targetY = p.y
+          targetX = p.x
+        } else {
+          // Focus target is gone (finished/eliminated). Cancel focus and fall back to auto.
+          this.camera.mode = 'auto'
+          this.camera.focusUntilMs = 0
+          this.camera.focusId = null
+          this.camera.focusName = null
+        }
+      }
+
+      if (this.camera.mode !== 'focus') {
+        // Auto: follow TOP1 (alive).
+        const sorted = alive.slice().sort((a, b) => b.progressY - a.progressY)
+        // If a marble was respawned (teleported), its current y can be far above its progressY.
+        // Avoid snapping the camera back to the top in that case.
+        const leader =
+          sorted.find((m) => {
+            const p = m.body.translation()
+            return m.progressY - p.y < 1200
+          }) ?? sorted[0]
+        const p = leader?.body.translation()
+        if (p) {
+          targetY = p.y
+          targetX = p.x
+        }
       }
     }
 
@@ -1500,6 +1667,7 @@ export class MarblesGame {
       if (m.isEliminated) {
         m.ring.visible = false
         if (m.label) m.label.visible = false
+        if (m.nameTag) m.nameTag.wrap.visible = false
         continue
       }
       const isHighlighted = highlight && m.participant.name === highlight
@@ -1509,11 +1677,21 @@ export class MarblesGame {
         m.ring.alpha = isFocus ? 0.95 : 0.65
         m.ring.scale.set(isFocus ? 1.25 : 1.1)
       }
-      if (isHighlighted || isFocus) {
-        const label = maybeCreateLabel({ PIXI: this.PIXI, marble: m })
-        label.visible = true
-      } else if (m.label) {
-        m.label.visible = false
+      const label = maybeCreateLabel({ PIXI: this.PIXI, marble: m })
+      // NOTE: 강조/포커스면 "이름 전체"를 보여주기 위해 이니셜은 숨겨요.
+      label.visible = !(isFocus || isHighlighted)
+      if (label.visible) {
+        label.alpha = 0.88
+        label.scale.set(1)
+      }
+
+      // Full name tag: only for focus/highlight (keeps the screen readable with 1,000 marbles).
+      if (isFocus || isHighlighted) {
+        const tag = maybeCreateNameTag({ PIXI: this.PIXI, marble: m })
+        tag.wrap.visible = true
+        tag.wrap.alpha = isFocus ? 1 : 0.9
+      } else if (m.nameTag) {
+        m.nameTag.wrap.visible = false
       }
     }
   }
@@ -1551,7 +1729,9 @@ export class MarblesGame {
     }
     const remaining = 10 - top10.length
     if (remaining > 0) {
-      const sorted = sortedAll.slice(0, remaining)
+      // NOTE: `onCupEntry()` can emit UI before the marble is removed from `alive` (same tick).
+      // Exclude cup entrants explicitly so Top10 never contains duplicate IDs.
+      const sorted = sortedAll.filter((m) => !this.cupEntryById.has(m.participant.id)).slice(0, remaining)
       for (const m of sorted) {
         top10.push({
           rank: top10.length + 1,
@@ -1595,6 +1775,9 @@ export class MarblesGame {
         ? { remainingMs: Math.max(0, this.finishState.postEndsAtMs - now) }
         : undefined
 
+    const winnerToast =
+      win && now < this.winnerToastUntilMs ? { remainingMs: Math.max(0, this.winnerToastUntilMs - now) } : undefined
+
     this.onUi({
       phase: this.phase,
       elapsedMs: Math.round(this.elapsedMs),
@@ -1612,6 +1795,7 @@ export class MarblesGame {
       focus,
       postFinish,
       winner: win,
+      winnerToast,
     })
   }
 
@@ -1671,6 +1855,24 @@ export class MarblesGame {
     // Extend slightly below the world so the bottom catcher floor can't leak at the corners.
     addWall(80, 0, 80, WORLD_H + 120)
     addWall(1200, 0, 1200, WORLD_H + 120)
+
+    // Top ceiling: prevents marbles from flying above y=0, where side walls don't exist.
+    // (Without this, a bumper hit can send a marble to y<0 and it can escape sideways outside the map.)
+    const ceilingX1 = 96
+    const ceilingX2 = 1184
+    const ceilingHalfH = 12
+    const ceilingCx = (ceilingX1 + ceilingX2) / 2
+    const ceilingCy = -ceilingHalfH // bottom face ~= y=0
+    const ceilingLen = ceilingX2 - ceilingX1
+    world.createCollider(
+      this.R.ColliderDesc.cuboid(ceilingLen / 2, ceilingHalfH)
+        .setTranslation(ceilingCx, ceilingCy)
+        .setFriction(0.6)
+        .setRestitution(0.12),
+      staticBody,
+    )
+    // Visual hint line (y=0)
+    mapLines.moveTo(ceilingX1, 0).lineTo(ceilingX2, 0).stroke({ color: 0x2a2a2a, width: 4, cap: 'round' })
 
     // Pinball board (no funnel, no repetitive steps)
     // Irregular pins: removes "clean lanes" (especially near the side walls).
@@ -1997,7 +2199,7 @@ export class MarblesGame {
         .stroke({ color: 0x1f2937, width: 2, cap: 'round' })
     }
 
-    // Warp zones (하위 30%만 발동) - 중후반 역전
+    // Warp zones (상위 30%만 발동) - 중후반 역전
     const warpZones = [
       { x: 360, y: 6100, halfW: 90, halfH: 18 },
       { x: 920, y: 6400, halfW: 90, halfH: 18 },
@@ -2056,7 +2258,7 @@ export class MarblesGame {
 
     // Magnet pit (leaders only): pulls top10 into a stall zone for a moment.
     // Place it away from jet bands so the effect reads clearly.
-    const magnet = { x: 820, y: 5600, r: 120 } as const
+    const magnet = { x: 820, y: 5600, r: 160 } as const
     const magnetCd = this.R.ColliderDesc.ball(magnet.r)
       .setTranslation(magnet.x, magnet.y)
       .setSensor(true)
@@ -2066,10 +2268,10 @@ export class MarblesGame {
     this.magnetByHandle.set(magnetCol.handle, {
       x: magnet.x,
       y: magnet.y,
-      pullY: magnet.y - 180,
+      pullY: magnet.y - 240,
       radius: magnet.r,
-      durationMs: ms('1100ms'),
-      cooldownMs: ms('240ms'),
+      durationMs: ms('3s'),
+      cooldownMs: ms('180ms'),
       lastAtMs: 0,
     })
     const magnetG = new this.PIXI.Graphics()
@@ -2188,6 +2390,9 @@ export class MarblesGame {
         magnetX: 0,
         magnetY: 0,
       }
+      // Names on marbles: show 2-grapheme initials derived from the participant name.
+      const label = maybeCreateLabel({ PIXI: this.PIXI, marble: m })
+      label.visible = true
       this.marbles.push(m)
       this.marblesByCollider.set(collider.handle, m)
     }
