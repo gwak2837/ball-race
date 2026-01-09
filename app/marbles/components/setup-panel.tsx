@@ -140,103 +140,87 @@ export function SetupPanel({ setup, engine, onStart }: SetupPanelProps) {
             </svg>
           </div>
         </summary>
-
-        <div
-          className={[
-            'grid grid-rows-[0fr]',
-            'transition-[grid-template-rows] duration-300 ease-out',
-            'group-open:grid-rows-[1fr]',
-          ].join(' ')}
-        >
-          <div className="min-h-0 overflow-hidden">
-            <div
-              className={[
-                'flex flex-col gap-4 pt-3',
-                'opacity-0 -translate-y-1',
-                'transition-[opacity,transform] duration-300 ease-out',
-                'group-open:opacity-100 group-open:translate-y-0',
-              ].join(' ')}
-            >
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  className="rounded-full border border-white/10 px-3 py-1 text-sm aria-pressed:border-white/30 aria-pressed:bg-white/5"
-                  aria-pressed={setupMode === 'auto'}
-                  onClick={onSelectAutoMode}
-                >
-                  자동 생성
-                </button>
-                <button
-                  type="button"
-                  className="rounded-full border border-white/10 px-3 py-1 text-sm aria-pressed:border-white/30 aria-pressed:bg-white/5"
-                  aria-pressed={setupMode === 'paste'}
-                  onClick={onSelectPasteMode}
-                >
-                  복붙 입력
-                </button>
-              </div>
-
-              {setupMode === 'auto' ? (
-                <label className="flex flex-col gap-2">
-                  <span className="text-sm text-zinc-300">자동 생성 인원(최대 1,000명)</span>
-                  <input
-                    className="h-10 rounded-xl border border-white/10 bg-zinc-950 px-3 text-sm outline-none focus:border-white/30"
-                    type="number"
-                    min={1}
-                    max={1000}
-                    value={autoCount}
-                    onChange={onAutoCountChange}
-                  />
-                </label>
-              ) : (
-                <label className="flex flex-col gap-2">
-                  <span className="text-sm text-zinc-300">닉네임을 줄바꿈으로 붙여 넣어 주세요</span>
-                  <textarea
-                    className="min-h-40 resize-y rounded-xl border border-white/10 bg-zinc-950 px-3 py-2 text-sm leading-6 outline-none focus:border-white/30"
-                    placeholder={'예)\n치즈\n고양이\n참가자0007'}
-                    value={namesText}
-                    onChange={onNamesTextChange}
-                    onKeyDown={onNamesTextKeyDown}
-                  />
-                </label>
-              )}
-
-              <label className="flex flex-col gap-2 rounded-xl border border-white/10 bg-zinc-950 px-3 py-2">
-                <div className="flex items-center justify-between">
-                  <div className="text-sm text-zinc-300">중력</div>
-                  <div className="text-xs tabular-nums text-zinc-400">{gravityY}</div>
-                </div>
-                <input
-                  className="w-full accent-white"
-                  type="range"
-                  min={500}
-                  max={1500}
-                  step={25}
-                  value={gravityY}
-                  disabled={phase === 'running'}
-                  onChange={onGravityChange}
-                />
-                <div className="text-xs text-zinc-500">너무 빠르면 낮추고, 답답하면 올려 주세요.</div>
-              </label>
-
-              <label className="flex flex-col gap-2 rounded-xl border border-white/10 bg-zinc-950 px-3 py-2">
-                <div className="flex items-center justify-between">
-                  <div className="text-sm text-zinc-300">자동 종료 최소 시간</div>
-                  <div className="text-xs tabular-nums text-zinc-400">{minRoundSec}초</div>
-                </div>
-                <input
-                  className="w-full accent-white"
-                  type="range"
-                  min={10}
-                  max={180}
-                  step={5}
-                  value={minRoundSec}
-                  disabled={phase === 'running'}
-                  onChange={onMinRoundSecChange}
-                />
-                <div className="text-xs text-zinc-500">이 시간 전에는 완주가 나와도 끝나지 않아요.</div>
-              </label>
+        <div>
+          <div className="flex flex-col gap-4 pt-3">
+            <div className="flex gap-2">
+              <button
+                type="button"
+                className="rounded-full border border-white/10 px-3 py-1 text-sm aria-pressed:border-white/30 aria-pressed:bg-white/5"
+                aria-pressed={setupMode === 'auto'}
+                onClick={onSelectAutoMode}
+              >
+                자동 생성
+              </button>
+              <button
+                type="button"
+                className="rounded-full border border-white/10 px-3 py-1 text-sm aria-pressed:border-white/30 aria-pressed:bg-white/5"
+                aria-pressed={setupMode === 'paste'}
+                onClick={onSelectPasteMode}
+              >
+                복붙 입력
+              </button>
             </div>
+
+            {setupMode === 'auto' ? (
+              <label className="flex flex-col gap-2">
+                <span className="text-sm text-zinc-300">자동 생성 인원(최대 1,000명)</span>
+                <input
+                  className="h-10 rounded-xl border border-white/10 bg-zinc-950 px-3 text-sm outline-none focus:border-white/30"
+                  type="number"
+                  min={1}
+                  max={1000}
+                  value={autoCount}
+                  onChange={onAutoCountChange}
+                />
+              </label>
+            ) : (
+              <label className="flex flex-col gap-2">
+                <span className="text-sm text-zinc-300">닉네임을 줄바꿈으로 붙여 넣어 주세요</span>
+                <textarea
+                  className="min-h-40 resize-y rounded-xl border border-white/10 bg-zinc-950 px-3 py-2 text-sm leading-6 outline-none focus:border-white/30"
+                  placeholder={'예)\n치즈\n고양이\n참가자0007'}
+                  value={namesText}
+                  onChange={onNamesTextChange}
+                  onKeyDown={onNamesTextKeyDown}
+                />
+              </label>
+            )}
+
+            <label className="flex flex-col gap-2 rounded-xl border border-white/10 bg-zinc-950 px-3 py-2">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-zinc-300">중력</div>
+                <div className="text-xs tabular-nums text-zinc-400">{gravityY}</div>
+              </div>
+              <input
+                className="w-full accent-white"
+                type="range"
+                min={500}
+                max={1500}
+                step={25}
+                value={gravityY}
+                disabled={phase === 'running'}
+                onChange={onGravityChange}
+              />
+              <div className="text-xs text-zinc-500">너무 빠르면 낮추고, 답답하면 올려 주세요.</div>
+            </label>
+
+            <label className="flex flex-col gap-2 rounded-xl border border-white/10 bg-zinc-950 px-3 py-2">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-zinc-300">자동 종료 최소 시간</div>
+                <div className="text-xs tabular-nums text-zinc-400">{minRoundSec}초</div>
+              </div>
+              <input
+                className="w-full accent-white"
+                type="range"
+                min={10}
+                max={180}
+                step={5}
+                value={minRoundSec}
+                disabled={phase === 'running'}
+                onChange={onMinRoundSecChange}
+              />
+              <div className="text-xs text-zinc-500">이 시간 전에는 완주가 나와도 끝나지 않아요.</div>
+            </label>
           </div>
         </div>
       </details>
