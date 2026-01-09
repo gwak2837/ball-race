@@ -2267,7 +2267,7 @@ export class MarblesGame {
     this.magnetByHandle.set(magnetCol.handle, {
       x: magnet.x,
       y: magnet.y,
-      pullY: magnet.y - 240,
+      pullY: magnet.y,
       radius: magnet.r,
       durationMs: ms('3s'),
       cooldownMs: ms('180ms'),
